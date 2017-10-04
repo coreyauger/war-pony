@@ -1,2 +1,3 @@
-# war-pont
-Scala questrade api wrapper
+# war-pony
+scala akka streams Questrade API wrappers.
+
