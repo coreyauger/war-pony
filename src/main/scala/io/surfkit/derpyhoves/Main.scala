@@ -22,18 +22,23 @@ object Main extends App{
     implicit val materializer = ActorMaterializer(ActorMaterializerSettings(system).withSupervisionStrategy(decider))
 
     try {
+      val api = new QuestradeApi(false)
+      import Questrade._
+
+      val sx = api.search("BABA")
+      val s =  Await.result(sx, 10 seconds)
+      println(s"sx: ${s}")
+
+      /*
       val json =
         """
-          |{"symbols":[{"symbol":"BABA","symbolId":7422546,"description":"ALIBABA GROUP HOLDINGS","securityType":"Stock","listingExchange":"NYSE","isTradable":true,"isQuotable":true,"currency":"USD"},{"symbol":"BABA","symbolId":1775254,"description":"BABY ALL CORP","securityType":"Stock","listingExchange":"OTCBB","isTradable":false,"isQuotable":false,"currency":"USD"}]}
+          |{"quotes":[{"symbol":"BABA","symbolId":7422546,"tier":"","bidPrice":null,"bidSize":0,"askPrice":null,"askSize":0,"lastTradePriceTrHrs":null,"lastTradePrice":null,"lastTradeSize":0,"lastTradeTick":null,"lastTradeTime":null,"volume":0,"openPrice":null,"highPrice":null,"lowPrice":null,"delay":0,"isHalted":false,"high52w":null,"low52w":null,"VWAP":null}]}
         """.stripMargin
 
-      val test = Json.parse(json).as[Questrade.Symbols]
+      val test = Json.parse(json).as[Questrade.Quotes]
       println(s"test: ${test}")
 
-      val refeshToken = "QnCMVfVqqQCyUCqH1c7ruFdzECiuzp_G0"
 
-      val api = new QuestradeApi(refeshToken, false)
-      import Questrade._
 
       val fx = api.accounts()
       val f= Await.result(fx, 10 seconds)
@@ -57,9 +62,7 @@ object Main extends App{
       val o =  Await.result(ox, 10 seconds)
       println(s"ox: ${o}")
 
-      val sx = api.search("BABA")
-      val s =  Await.result(sx, 10 seconds)
-      println(s"sx: ${s}")
+
 
       val qx = api.quote(Set(s.symbols.head.symbolId))
       val q =  Await.result(qx, 10 seconds)
@@ -71,8 +74,15 @@ object Main extends App{
       val c =  Await.result(cx, 10 seconds)
       println(s"cx: ${c}")
 
-      val ticker = QuestradeOneMinuteTicker(9292)
-      ticker.json.runForeach(i => i.foreach(println) )(materializer)
+      val ticker = QuestradeOneMinuteTicker(api.getCreds _, 9292)
+      ticker.json.runForeach(i => i.foreach(x => println(s"meep: ${x}")) )(materializer)
+*/
+      val l1Future = api.l1Stream(Set(s.symbols.head.symbolId))
+      l1Future.foreach{ ws =>
+        ws.subscribe({ quote: Questrade.Quotes =>
+          println(s"GOT QUOTE: ${quote}")
+        })
+      }
 
       Thread.currentThread.join()
     }catch{

@@ -12,6 +12,11 @@ import play.api.libs.json._
 
 import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext, Future}
+import java.io.{File, PrintWriter}
+
+import com.typesafe.config._
+
+import scala.util.Try
 
 /**
   * Created by suroot on 03/10/17.
@@ -270,19 +275,19 @@ object Questrade {
                     symbol: String,
                     symbolId: Int,
                     tier: String,
-                    bidPrice: Double,
+                    bidPrice: Option[Double],
                     bidSize: Int,
-                    askPrice: Double,
+                    askPrice: Option[Double],
                     askSize: Int,
-                    lastTradePriceTrHrs: Double,
-                    lastTradePrice: Double,
+                    lastTradePriceTrHrs: Option[Double],
+                    lastTradePrice: Option[Double],
                     lastTradeSize: Int,
-                    lastTradeTick: String,
-                    lastTradeTime: DateTime,
+                    lastTradeTick: Option[String],
+                    lastTradeTime: Option[DateTime],
                     volume: Long,
-                    openPrice: Double,
-                    highPrice: Double,
-                    lowPrice: Double,
+                    openPrice: Option[Double],
+                    highPrice: Option[Double],
+                    lowPrice: Option[Double],
                     delay: Int,
                     isHalted: Boolean
                   ) extends QT
@@ -317,10 +322,16 @@ object Questrade {
   case class StreamPort(streamPort: Int) extends QT
   implicit val StreamPortWrites = Json.writes[StreamPort]
   implicit val StreamPortReads = Json.reads[StreamPort]
+
+  def intervalParams(interval:Questrade.Interval) = {
+    val endTime = DateTime.now().secondOfMinute().setCopy(0)
+    val startTime = endTime.plusSeconds(-interval.toDuration.toSeconds.toInt)
+    s"?startTime=${startTime.toString("yyyy-MM-dd'T'HH:mm:ssZZ")}&endTime=${endTime.toString("yyyy-MM-dd'T'HH:mm:ssZZ")}&interval=${interval.period}"
+  }
 }
 
-class QuestradeTicker[T <: Questrade.QT](symbolId: Int, interval: Questrade.Interval, tz: DateTimeZone, fuzz: Double = 6.66)(implicit system: ActorSystem, materializer: Materializer, um: Reads[T]) extends QuestradePoller(
-  url = s"https://api01.iq.questrade.com/v1/markets/candles/${symbolId}", interval = interval, fuzz = fuzz, Some(tz)) with PlayJsonSupport{
+class QuestradeTicker[T <: Questrade.QT](creds: () => Questrade.Login, symbolId: Int, interval: Questrade.Interval, tz: DateTimeZone, params: Questrade.Interval => String, fuzz: Double = 6.66)(implicit system: ActorSystem, materializer: Materializer, um: Reads[T]) extends QuestradePoller(
+  creds = creds, path = s"v1/markets/candles/${symbolId}", interval = interval, fuzz = fuzz, params = params, hoursOpt = Some(tz)) with PlayJsonSupport{
 
   def json(): Source[Future[T], Cancellable] = super.apply().map{
     case scala.util.Success(response) => Unmarshal(response.entity).to[T]
@@ -328,28 +339,62 @@ class QuestradeTicker[T <: Questrade.QT](symbolId: Int, interval: Questrade.Inte
   }
 }
 
-case class QuestradeOneMinuteTicker(symbolId: Int, tz: DateTimeZone = DateTimeZone.forID("US/Eastern"), fuzz: Double = 6.66)(implicit system: ActorSystem, materializer: Materializer, um: Reads[Questrade.Candles])
-  extends QuestradeTicker[Questrade.Candles](symbolId, Questrade.Interval.OneMinute, tz, fuzz)
+case class QuestradeOneMinuteTicker(creds: () => Questrade.Login, symbolId: Int, tz: DateTimeZone = DateTimeZone.forID("US/Eastern"), fuzz: Double = 6.66)(implicit system: ActorSystem, materializer: Materializer, um: Reads[Questrade.Candles])
+  extends QuestradeTicker[Questrade.Candles](creds, symbolId, Questrade.Interval.OneMinute, tz, params = Questrade.intervalParams, fuzz)
 
-case class QuestradeFifteenMinuteTicker(symbolId: Int, tz: DateTimeZone = DateTimeZone.forID("US/Eastern"), fuzz: Double = 6.66)(implicit system: ActorSystem, materializer: Materializer, um: Reads[Questrade.Candles])
-  extends QuestradeTicker[Questrade.Candles](symbolId, Questrade.Interval.FifteenMinutes, tz, fuzz)
+case class QuestradeFifteenMinuteTicker(creds: () => Questrade.Login, symbolId: Int, tz: DateTimeZone = DateTimeZone.forID("US/Eastern"), fuzz: Double = 6.66)(implicit system: ActorSystem, materializer: Materializer, um: Reads[Questrade.Candles])
+  extends QuestradeTicker[Questrade.Candles](creds, symbolId, Questrade.Interval.FifteenMinutes, tz, params = Questrade.intervalParams, fuzz)
 
-case class QuestradeThirtyMinuteTicker(symbolId: Int, tz: DateTimeZone = DateTimeZone.forID("US/Eastern"), fuzz: Double = 6.66)(implicit system: ActorSystem, materializer: Materializer, um: Reads[Questrade.Candles])
-  extends QuestradeTicker[Questrade.Candles](symbolId, Questrade.Interval.HalfHour, tz, fuzz)
+case class QuestradeThirtyMinuteTicker(creds: () => Questrade.Login, symbolId: Int, tz: DateTimeZone = DateTimeZone.forID("US/Eastern"), fuzz: Double = 6.66)(implicit system: ActorSystem, materializer: Materializer, um: Reads[Questrade.Candles])
+  extends QuestradeTicker[Questrade.Candles](creds, symbolId, Questrade.Interval.HalfHour, tz, params = Questrade.intervalParams, fuzz)
 
-case class QuestradeOneHourTicker(symbolId: Int, tz: DateTimeZone = DateTimeZone.forID("US/Eastern"), fuzz: Double = 6.66)(implicit system: ActorSystem, materializer: Materializer, um: Reads[Questrade.Candles])
-  extends QuestradeTicker[Questrade.Candles](symbolId, Questrade.Interval.OneHour, tz, fuzz)
+case class QuestradeOneHourTicker(creds: () => Questrade.Login, symbolId: Int, tz: DateTimeZone = DateTimeZone.forID("US/Eastern"), fuzz: Double = 6.66)(implicit system: ActorSystem, materializer: Materializer, um: Reads[Questrade.Candles])
+  extends QuestradeTicker[Questrade.Candles](creds, symbolId, Questrade.Interval.OneHour, tz, params = Questrade.intervalParams, fuzz)
 
-class QuestradeApi(refreshToken: String, practice: Boolean = false)(implicit system: ActorSystem, materializer: Materializer, ex: ExecutionContext) extends PlayJsonSupport {
 
-  val loginUrl =
+case class QuestradeRefresh(creds: () => Questrade.Login, practice: Boolean)(implicit system: ActorSystem, materializer: Materializer, um: Reads[Questrade.Candles]) extends QuestradePoller(
+  creds = () => { Questrade.Login("","",0, "", "") },
+  path = if(practice) s"https://practicelogin.questrade.com/oauth2/token" else s"https://login.questrade.com/oauth2/token",
+  interval = Questrade.Interval.OneHour, fuzz = 0.0, params = {i:Questrade.Interval =>
+    s"?grant_type=refresh_token&refresh_token=${creds().refresh_token}"
+  }, hoursOpt = None) with PlayJsonSupport {
+
+  def json(): Source[Future[Questrade.Login], Cancellable] = super.apply().map {
+    case scala.util.Success(response) => Unmarshal(response.entity).to[Questrade.Login]
+    case scala.util.Failure(ex) => Future.failed(ex)
+  }
+}
+
+class QuestradeApi(practice: Boolean = false)(implicit system: ActorSystem, materializer: Materializer, ex: ExecutionContext) extends PlayJsonSupport {
+
+  val temp: File = File.createTempFile("just-need-the-path", ".tmp")
+  val teamPath = temp.getAbsolutePath
+  val tokenFile = s"${teamPath.substring(0,teamPath.lastIndexOf(File.separator))}/war-pony-refresh.token"
+  val config = ConfigFactory.load()
+  var refreshToken = Try(scala.io.Source.fromFile(tokenFile)).toOption.map(_.mkString).getOrElse(config.getString("refreshToken"))
+  println(s"refreshToken: ${refreshToken}")
+
+  def loginUrl =
     if(practice) s"https://practicelogin.questrade.com/oauth2/token?grant_type=refresh_token&refresh_token=${refreshToken}"
     else s"https://login.questrade.com/oauth2/token?grant_type=refresh_token&refresh_token=${refreshToken}"
 
   def baseUrl = s"${baseHost}v1/"
 
-  val creds = Await.result(login, 5 seconds)
-  println(s"Creds: ${creds}")
+  var creds = Await.result(login, 5 seconds)
+  def getCreds = creds
+
+  def storeLogin(login: Questrade.Login): Questrade.Login ={
+    println(s"beep: ${login}")
+    creds = login
+    val writer = new PrintWriter(new File(tokenFile))
+    writer.write(login.refresh_token)
+    writer.close()
+    println(s"creds: ${creds}")
+    login
+  }
+
+  val refresh = QuestradeRefresh(getCreds _, practice)
+  refresh.json().runForeach(_.foreach(storeLogin) )
 
   var baseHost = creds.api_server
   object httpApi extends QuestradeSignedRequester(baseUrl, creds.access_token)
@@ -357,7 +402,7 @@ class QuestradeApi(refreshToken: String, practice: Boolean = false)(implicit sys
   def unmarshal[T <: Questrade.QT](response: HttpResponse)(implicit um: Reads[T]):Future[T] = Unmarshal(response.entity).to[T]
 
   def login()(implicit um: Reads[Questrade.Login]) =
-    Http().singleRequest(HttpRequest(uri = loginUrl)).flatMap(x => unmarshal(x) )
+    Http().singleRequest(HttpRequest(uri = loginUrl)).flatMap(x => unmarshal(x)).map(storeLogin)
 
   def accounts()(implicit um: Reads[Questrade.Accounts]) =
     httpApi.get("accounts").flatMap(x => unmarshal(x) )
@@ -392,10 +437,19 @@ class QuestradeApi(refreshToken: String, practice: Boolean = false)(implicit sys
   private[this] def notificationStreamPort()(implicit um: Reads[Questrade.StreamPort]) =
     httpApi.get("notifications?mode=WebSocket").flatMap(x => unmarshal(x) )
 
-  def notifications(implicit um: Reads[Questrade.QT]) = {
+  private[this] def l1StreamPort(ids: Set[Int])(implicit um: Reads[Questrade.StreamPort]) =
+    httpApi.get(s"markets/quotes?ids=${ids.mkString("",",","")}&stream=true&mode=WebSocket").flatMap(x => unmarshal(x) )
+
+  def notifications(implicit um: Reads[Questrade.Orders]) =
     notificationStreamPort.map{ sp =>
-      new QuestradeWebSocket(s"ws://${baseHost}:${sp.streamPort}", "ACCESS_TOKEN")
+      new QuestradeWebSocket[Questrade.Orders](s"wss://api03.iq.questrade.com:${sp.streamPort}", getCreds _ )
     }
-  }
+
+    //GET https://api01.iq.questrade.com/v1/markets/quotes?ids=9291,8049&stream=true&mode=WebSocket
+    def l1Stream(ids: Set[Int]) =
+      l1StreamPort(ids).map{ sp =>
+        new QuestradeWebSocket[Questrade.Quotes](s"wss://api03.iq.questrade.com:${sp.streamPort}", getCreds _ )
+      }
+
 
 }

@@ -14,15 +14,15 @@ import scala.collection.mutable
 
 
 object WsActor{
-  def props(wsBot: QuestradeWebSocket): Props = Props(classOf[WsActor], wsBot)
+  def props[T <: Questrade.QT](wsBot: QuestradeWebSocket[T]): Props = Props(classOf[WsActor], wsBot)
 }
 
-class WsActor(wsBot: QuestradeWebSocket)(implicit um: Writes[Questrade.QT]) extends ActorPublisher[TextMessage] {
+class WsActor(wsBot: QuestradeWebSocket[Questrade.QT]) extends ActorPublisher[TextMessage] {
 
-  val requestQueue = mutable.Queue[Questrade.QT]()
+  val requestQueue = mutable.Queue[Questrade.Login]()
 
   def receive = {
-    case x: Questrade.QT=>
+    case x: Questrade.Login =>
       requestQueue.enqueue(x)
       sendReq
     case OnComplete =>
@@ -43,8 +43,9 @@ class WsActor(wsBot: QuestradeWebSocket)(implicit um: Writes[Questrade.QT]) exte
   def sendReq() {
     while(isActive && totalDemand > 0 && !requestQueue.isEmpty) {
       val x = requestQueue.dequeue()
-      val json = Json.stringify(um.writes(x))
+      val json = x.access_token
       try {
+        println(s"ws send: ${json}")
         onNext(TextMessage(json))
       }catch{
         case t: Throwable =>

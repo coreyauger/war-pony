@@ -20,7 +20,7 @@ import java.io.Serializable
 import play.api.libs.json.{Json, Reads}
 
 
-class QuestradeWebSocket(endpoint: String = "ws://api01.iq.questrade.com:8080", accessToken: String)(implicit val system: ActorSystem, um: Reads[Questrade.QT]) extends Serializable {
+class QuestradeWebSocket[T <: Questrade.QT](endpoint: String = "ws://api01.iq.questrade.com:8080", creds: () => Questrade.Login)(implicit val system: ActorSystem, um: Reads[T]) extends Serializable {
 
   import system.dispatcher
 
@@ -30,17 +30,17 @@ class QuestradeWebSocket(endpoint: String = "ws://api01.iq.questrade.com:8080", 
 
   implicit val materializer = ActorMaterializer(ActorMaterializerSettings(system).withSupervisionStrategy(decider))
 
-  var responsers = Map.empty[ String, List[Questrade.QT => Unit] ]
+  var responsers = Map.empty[ String, List[T => Unit] ]
 
   def callResponders(txt: String) = {
-    //println(s"socket: ${txt}")
-    //val event = mapper.readValue(txt,classOf[SocketEvent[m.Model]])
-    val model = Json.parse(txt).as[Questrade.QT]
-    val key = model.getClass.getName
-    //println(s"looking up key: ${key}")
-    responsers.get(key).map{ res =>
-      //println("got socket event .. calling.")
-      res.foreach(_(model))
+    println(s"socket: ${txt}")
+    if(!txt.contains("success")){
+      val model = Json.parse(txt).as[T]
+      val key = model.getClass.getName
+      responsers.get(key).map{ res =>
+        //println("got socket event .. calling.")
+        res.foreach(_(model))
+      }
     }
   }
 
@@ -68,40 +68,31 @@ class QuestradeWebSocket(endpoint: String = "ws://api01.iq.questrade.com:8080", 
 
   // send this as a message over the WebSocket
   //val outgoing = Source.single(TextMessage("hello world!"))
-  val outgoing = Source.actorPublisher(WsActor.props(this))
+  val outgoing = Source.actorPublisher(WsActor.props[T](this))
 
   val defaultSSLConfig = AkkaSSLConfig.get(system)
 
   def webSocketFlow = Http().webSocketClientFlow(WebSocketRequest(endpoint, extraHeaders =
-    scala.collection.immutable.Seq(Authorization(OAuth2BearerToken(accessToken)))
+    scala.collection.immutable.Seq(Authorization(OAuth2BearerToken(creds().access_token)))
   ),connectionContext = Http().createClientHttpsContext(AkkaSSLConfig()))
 
   def connect:ActorRef = {
+    println(s"calling connect: ${endpoint}")
     ref = Flow[TextMessage]
       // http://stackoverflow.com/questions/37716218/how-to-keep-connection-open-for-all-the-time-in-websockets
-     /* .keepAlive(45.seconds, () => TextMessage(
-      """
-        |{
-        | "correlationId": "hb",
-        | "occurredAt": "2000-01-02 10:20:00",
-        | "payload":{"$type": "m.State.Hb"}
-        | }
-      """.stripMargin))*/
+      .keepAlive(25 minutes, () => TextMessage(creds().access_token))
       .viaMat(webSocketFlow)(Keep.right) // keep the materialized Future[WebSocketUpgradeResponse]
       .toMat(incoming)(Keep.both) // also keep the Future[Done]
       .runWith(outgoing)
+    ref ! creds()
     ref
   }
 
+  println(s"call connect: ${endpoint}")
   var ref = connect
   var cancel: Option[Cancellable] = None
-  var delay = 0
 
-  def onNext(x: Questrade.QT): Unit = {
-    ref ! x
-  }
-
-  def subscribe[T : ClassTag](handler: Questrade.QT => Unit ) = {
+  def subscribe[T : ClassTag](handler: T => Unit ) = {
     val key = classTag[T].runtimeClass.getName
     responsers += (responsers.get(key) match{
       case Some(xs) => key -> (handler.asInstanceOf[Questrade.QT => Unit] :: xs)

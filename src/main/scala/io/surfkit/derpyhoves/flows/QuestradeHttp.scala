@@ -19,31 +19,27 @@ import scala.util.Try
   */
 
 
-class QuestradePoller(url: String, interval: Questrade.Interval, fuzz: Double, hoursOpt: Option[DateTimeZone] = None)(implicit system: ActorSystem, materializer: Materializer) {
+class QuestradePoller(creds: () => Questrade.Login,path: String, interval: Questrade.Interval, fuzz: Double, hoursOpt: Option[DateTimeZone] = None, params: Questrade.Interval => String)(implicit system: ActorSystem, materializer: Materializer) {
   import scala.concurrent.duration._
-  def params = {
-    val endTime = DateTime.now().secondOfMinute().setCopy(0)
-    val startTime = endTime.plusSeconds(-interval.toDuration.toSeconds.toInt)
-    s"?startTime=${startTime.withZone(DateTimeZone.forID("US/Eastern")).toString("yyyy-MM-dd'T'HH:mm:ssZZ")}&endTime=${endTime.withZone(DateTimeZone.forID("US/Eastern")).toString("yyyy-MM-dd'T'HH:mm:ssZZ")}&interval=${interval.period}"
+
+  def request: akka.http.scaladsl.model.HttpRequest = {
+    val url = s"${creds().api_server}${path}${params(interval)}"
+    val accessToken = creds().access_token
+    println(s"curl -XGET '${url}' -H 'Authorization: Bearer ${accessToken}'")
+    RequestBuilding.Get(Uri(url)).addHeader(Authorization(OAuth2BearerToken(creds().access_token)))
   }
-  def request: akka.http.scaladsl.model.HttpRequest = RequestBuilding.Get(Uri(url+params))
   val initialDelat = (60.0-DateTime.now.getSecondOfMinute.toDouble) + (Math.random() * fuzz + 1.0)    // set to the end of the minute plus some fuzzy
-  val source: Source[HttpRequest, Cancellable] = Source.tick(initialDelat.seconds, interval.toDuration, request).filter{ _ =>
+  val source: Source[() => HttpRequest, Cancellable] = Source.tick(initialDelat.seconds, interval.toDuration, request _).filter{ _ =>
     hoursOpt.map{ timezone =>
       val dt = new DateTime(timezone)
       dt.getHourOfDay >= 8 && dt.getHourOfDay <= 16 && dt.getDayOfWeek() >= org.joda.time.DateTimeConstants.MONDAY && dt.getDayOfWeek() <= org.joda.time.DateTimeConstants.FRIDAY
     }.getOrElse(true)
   }
-  val sourceWithDest: Source[Try[HttpResponse], Cancellable] = source.map(req ⇒ (req, NotUsed)).via(Http().superPool[NotUsed]()).map(_._1)
+  val sourceWithDest: Source[Try[HttpResponse], Cancellable] = source.map(req ⇒ (req(), NotUsed)).via(Http().superPool[NotUsed]()).map(_._1)
 
   def apply(): Source[Try[HttpResponse], Cancellable] = sourceWithDest
-
-  def shutdown = {
-    Http().shutdownAllConnectionPools()
-  }
+  def shutdown = Http().shutdownAllConnectionPools()
 }
-
-
 
 
 class QuestradeSignedRequester(baseUrl: String, accessToken: String)(implicit system: ActorSystem, materializer: Materializer){
