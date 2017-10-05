@@ -19,9 +19,7 @@ import java.io.Serializable
 
 import play.api.libs.json.{Json, Reads}
 
-
-class QuestradeWebSocket[T <: Questrade.QT](endpoint: String = "ws://api01.iq.questrade.com:8080", creds: () => Questrade.Login)(implicit val system: ActorSystem, um: Reads[T]) extends Serializable {
-
+class QuestradeWebSocket[T <: Questrade.QT](endpoint: () => Future[String], creds: () => Questrade.Login)(implicit val system: ActorSystem, um: Reads[T]) extends Serializable {
   import system.dispatcher
 
   private[this] val decider: Supervision.Decider = {
@@ -72,24 +70,27 @@ class QuestradeWebSocket[T <: Questrade.QT](endpoint: String = "ws://api01.iq.qu
 
   val defaultSSLConfig = AkkaSSLConfig.get(system)
 
-  def webSocketFlow = Http().webSocketClientFlow(WebSocketRequest(endpoint, extraHeaders =
+  def webSocketFlow(url: String) = Http().webSocketClientFlow(WebSocketRequest(url, extraHeaders =
     scala.collection.immutable.Seq(Authorization(OAuth2BearerToken(creds().access_token)))
   ),connectionContext = Http().createClientHttpsContext(AkkaSSLConfig()))
 
-  def connect:ActorRef = {
-    println(s"calling connect: ${endpoint}")
-    ref = Flow[TextMessage]
-      // http://stackoverflow.com/questions/37716218/how-to-keep-connection-open-for-all-the-time-in-websockets
-      .keepAlive(25 minutes, () => TextMessage(creds().access_token))
-      .viaMat(webSocketFlow)(Keep.right) // keep the materialized Future[WebSocketUpgradeResponse]
-      .toMat(incoming)(Keep.both) // also keep the Future[Done]
-      .runWith(outgoing)
-    ref ! creds()
-    ref
+  def connect:Future[ActorRef] = {
+    println("call connect")
+    endpoint().map { url =>
+      println(s"calling connect: ${url}")
+      val ref = Flow[TextMessage]
+        // http://stackoverflow.com/questions/37716218/how-to-keep-connection-open-for-all-the-time-in-websockets
+        .keepAlive(25 minutes, () => TextMessage(creds().access_token))
+        .viaMat(webSocketFlow(url))(Keep.right) // keep the materialized Future[WebSocketUpgradeResponse]
+        .toMat(incoming)(Keep.both) // also keep the Future[Done]
+        .runWith(outgoing)
+      ref ! creds()
+      ref
+    }
   }
 
   println(s"call connect: ${endpoint}")
-  var ref = connect
+  connect
   var cancel: Option[Cancellable] = None
 
   def subscribe[T : ClassTag](handler: T => Unit ) = {
@@ -101,6 +102,6 @@ class QuestradeWebSocket[T <: Questrade.QT](endpoint: String = "ws://api01.iq.qu
   }
 
 
-  var onError = { t:Throwable => Unit }
+  var onError = { t:Throwable => t.getStackTrace }
 
 }

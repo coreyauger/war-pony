@@ -13,6 +13,7 @@ import play.api.libs.json._
 import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext, Future}
 import java.io.{File, PrintWriter}
+import java.net.URL
 
 import com.typesafe.config._
 
@@ -365,7 +366,7 @@ case class QuestradeRefresh(creds: () => Questrade.Login, practice: Boolean)(imp
   }
 }
 
-class QuestradeApi(practice: Boolean = false)(implicit system: ActorSystem, materializer: Materializer, ex: ExecutionContext) extends PlayJsonSupport {
+class QuestradeApi(practice: Boolean = false, tokenProvider: Option[() => Future[Questrade.Login]] = None)(implicit system: ActorSystem, materializer: Materializer, ex: ExecutionContext) extends PlayJsonSupport {
 
   val temp: File = File.createTempFile("just-need-the-path", ".tmp")
   val teamPath = temp.getAbsolutePath
@@ -374,13 +375,29 @@ class QuestradeApi(practice: Boolean = false)(implicit system: ActorSystem, mate
   var refreshToken = Try(scala.io.Source.fromFile(tokenFile)).toOption.map(_.mkString).getOrElse(config.getString("refreshToken"))
   println(s"refreshToken: ${refreshToken}")
 
+  def baseUrl = s"${baseHost}v1/"
+
   def loginUrl =
     if(practice) s"https://practicelogin.questrade.com/oauth2/token?grant_type=refresh_token&refresh_token=${refreshToken}"
     else s"https://login.questrade.com/oauth2/token?grant_type=refresh_token&refresh_token=${refreshToken}"
 
-  def baseUrl = s"${baseHost}v1/"
+  def refresh(when: FiniteDuration): Cancellable = system.scheduler.scheduleOnce(when) {
+    def updateToken(l: Questrade.Login): Unit = {
+      refresh(l.expires_in seconds)
+      creds = l
+    }
+    tokenProvider match{
+      case Some(tp) => tp().foreach(updateToken)
+      case _ => login().foreach(updateToken)
+    }
+  }
 
-  var creds = Await.result(login, 5 seconds)
+  var creds = Await.result(tokenProvider match{
+    case Some(tp) => tp()
+    case _ => login()
+  } , 5 seconds)
+  refresh(creds.expires_in seconds)
+
   def getCreds = creds
 
   def storeLogin(login: Questrade.Login): Questrade.Login ={
@@ -393,11 +410,8 @@ class QuestradeApi(practice: Boolean = false)(implicit system: ActorSystem, mate
     login
   }
 
-  val refresh = QuestradeRefresh(getCreds _, practice)
-  refresh.json().runForeach(_.foreach(storeLogin) )
-
   var baseHost = creds.api_server
-  object httpApi extends QuestradeSignedRequester(baseUrl, creds.access_token)
+  object httpApi extends QuestradeSignedRequester(baseUrl, getCreds _)
 
   def unmarshal[T <: Questrade.QT](response: HttpResponse)(implicit um: Reads[T]):Future[T] = Unmarshal(response.entity).to[T]
 
@@ -441,15 +455,12 @@ class QuestradeApi(practice: Boolean = false)(implicit system: ActorSystem, mate
     httpApi.get(s"markets/quotes?ids=${ids.mkString("",",","")}&stream=true&mode=WebSocket").flatMap(x => unmarshal(x) )
 
   def notifications(implicit um: Reads[Questrade.Orders]) =
-    notificationStreamPort.map{ sp =>
-      new QuestradeWebSocket[Questrade.Orders](s"wss://api03.iq.questrade.com:${sp.streamPort}", getCreds _ )
-    }
+    new QuestradeWebSocket[Questrade.Orders](() => notificationStreamPort.map(sp =>  s"wss://${new URL(baseHost).getHost}:${sp.streamPort}"), getCreds _ )
 
-    //GET https://api01.iq.questrade.com/v1/markets/quotes?ids=9291,8049&stream=true&mode=WebSocket
-    def l1Stream(ids: Set[Int]) =
-      l1StreamPort(ids).map{ sp =>
-        new QuestradeWebSocket[Questrade.Quotes](s"wss://api03.iq.questrade.com:${sp.streamPort}", getCreds _ )
-      }
+  //GET https://api01.iq.questrade.com/v1/markets/quotes?ids=9291,8049&stream=true&mode=WebSocket
+  def l1Stream(ids: Set[Int]) =
+    new QuestradeWebSocket[Questrade.Quotes]( () => l1StreamPort(ids).map(sp => s"wss://${new URL(baseHost).getHost}:${sp.streamPort}"), getCreds _ )
+
 
 
 }

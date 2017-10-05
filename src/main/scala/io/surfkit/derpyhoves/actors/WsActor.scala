@@ -8,8 +8,6 @@ import akka.stream.actor.ActorPublisher
 import io.surfkit.derpyhoves.flows.{Questrade, QuestradeWebSocket}
 import scala.concurrent.duration._
 import scala.concurrent.ExecutionContext.Implicits.global
-import play.api.libs.json.{Json, Writes}
-
 import scala.collection.mutable
 
 
@@ -32,10 +30,10 @@ class WsActor(wsBot: QuestradeWebSocket[Questrade.QT]) extends ActorPublisher[Te
       sendReq
     case x: Cancel =>
       context.stop(self)
-      context.system.scheduler.scheduleOnce(10 seconds) {
-        wsBot.connect // FIXME: this is cheesy as hell !!!
+      context.system.scheduler.scheduleOnce(2 seconds) {
+        println("reconnect !!")
+        wsBot.connect
       }
-
     case x =>
       println(s"ERROR: Unknown message for BotActor: ${x}")
   }

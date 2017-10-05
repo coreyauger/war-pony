@@ -42,20 +42,23 @@ class QuestradePoller(creds: () => Questrade.Login,path: String, interval: Quest
 }
 
 
-class QuestradeSignedRequester(baseUrl: String, accessToken: String)(implicit system: ActorSystem, materializer: Materializer){
+class QuestradeSignedRequester(baseUrl: String, creds: () => Questrade.Login)(implicit system: ActorSystem, materializer: Materializer){
   def get(path: String) = {
-    println(s"url: ${baseUrl}${path}")
-    Http().singleRequest(HttpRequest(uri = s"${baseUrl}${path}").addHeader(Authorization(OAuth2BearerToken(accessToken))))
+    val login = creds()
+    println(s"curl -XGET '${baseUrl}${path}' -H 'Authorization: Bearer ${login.access_token}'")
+    Http().singleRequest(HttpRequest(uri = s"${baseUrl}${path}").addHeader(Authorization(OAuth2BearerToken(login.access_token))))
   }
 
   def post[T <: Questrade.QT](path: String, post: T)(implicit uw: Writes[T]) = {
+    val login = creds()
     val data = ByteString(Json.stringify(uw.writes(post) ))
     println(s"url: ${baseUrl}${path}")
-    Http().singleRequest(HttpRequest(method=HttpMethods.POST, uri = s"${baseUrl}${path}", entity=data).addHeader(Authorization(OAuth2BearerToken(accessToken))))
+    Http().singleRequest(HttpRequest(method=HttpMethods.POST, uri = s"${baseUrl}${path}", entity=data).addHeader(Authorization(OAuth2BearerToken(login.access_token))))
   }
 
   def delete(path: String) = {
+    val login = creds()
     println(s"url: ${baseUrl}${path}")
-    Http().singleRequest(HttpRequest(method=HttpMethods.DELETE, uri = s"${baseUrl}${path}").addHeader(Authorization(OAuth2BearerToken(accessToken))))
+    Http().singleRequest(HttpRequest(method=HttpMethods.DELETE, uri = s"${baseUrl}${path}").addHeader(Authorization(OAuth2BearerToken(login.access_token))))
   }
 }
