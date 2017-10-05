@@ -366,6 +366,15 @@ case class QuestradeRefresh(creds: () => Questrade.Login, practice: Boolean)(imp
   }
 }
 
+case class QuestradeLogin(refreshToken: String, practice: Boolean = false)(implicit system: ActorSystem, materializer: Materializer, ex: ExecutionContext) extends PlayJsonSupport {
+  def unmarshal[T <: Questrade.QT](response: HttpResponse)(implicit um: Reads[T]):Future[T] = Unmarshal(response.entity).to[T]
+  def loginUrl =
+    if(practice) s"https://practicelogin.questrade.com/oauth2/token?grant_type=refresh_token&refresh_token=${refreshToken}"
+    else s"https://login.questrade.com/oauth2/token?grant_type=refresh_token&refresh_token=${refreshToken}"
+  def login()(implicit um: Reads[Questrade.Login]) =
+    Http().singleRequest(HttpRequest(uri = loginUrl)).flatMap(x => unmarshal(x))
+}
+
 class QuestradeApi(practice: Boolean = false, tokenProvider: Option[() => Future[Questrade.Login]] = None)(implicit system: ActorSystem, materializer: Materializer, ex: ExecutionContext) extends PlayJsonSupport {
 
   val temp: File = File.createTempFile("just-need-the-path", ".tmp")

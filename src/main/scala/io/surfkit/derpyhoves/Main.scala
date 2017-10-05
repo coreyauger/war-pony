@@ -66,11 +66,11 @@ object Main extends App{
 
       val end = DateTime.now.secondOfMinute().setCopy(0)
       val nowMinus1 = end.plusMinutes(-2)
-      val cx = api.candles(9292, nowMinus1, end, Questrade.Interval.OneMinute)
+      val cx = api.candles(s.symbols.head.symbolId, nowMinus1, end, Questrade.Interval.OneMinute)
       val c =  Await.result(cx, 10 seconds)
       println(s"cx: ${c}")
 
-      val ticker = QuestradeOneMinuteTicker(api.getCreds _, 9292)
+      val ticker = QuestradeOneMinuteTicker(api.getCreds _, s.symbols.head.symbolId)
       ticker.json.runForeach(i => i.foreach(x => println(s"meep: ${x}")) )(materializer)
 
       val l1 = api.l1Stream(Set(s.symbols.head.symbolId))
