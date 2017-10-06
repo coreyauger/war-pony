@@ -138,6 +138,59 @@ object Questrade {
   implicit val ExtraWrites = Json.writes[Extra]
   implicit val ExtraReads = Json.reads[Extra]
 
+  case class OrderAction(action: String)
+  object OrderAction{
+    val Buy = OrderAction("Buy")
+    val Sell = OrderAction("Sell")
+  }
+
+  case class OrderType(name: String)
+  object OrderType{
+    val Market = OrderType("Market")
+    val Limit = OrderType("Limit")
+    val Stop = OrderType("Stop")
+    val StopLimit = OrderType("StopLimit")
+    val TrailStopInPercentage = OrderType("TrailStopInPercentage")
+    val TrailStopInDollar = OrderType("TrailStopInDollar")
+    val TrailStopLimitInPercentage = OrderType("TrailStopLimitInPercentage")
+    val TrailStopLimitInDollar = OrderType("TrailStopLimitInDollar")
+    val LimitOnOpen = OrderType("LimitOnOpen")
+    val LimitOnClose = OrderType("LimitOnClose")
+  }
+
+  case class OrderTimeInForce(name: String)
+  object OrderTimeInForce{
+    val Day = OrderTimeInForce("Day")
+    val GoodTillCanceled = OrderTimeInForce("GoodTillCanceled")
+    val GoodTillExtendedDay = OrderTimeInForce("GoodTillExtendedDay")
+    val GoodTillDate = OrderTimeInForce("GoodTillDate")
+    val ImmediateOrCancel = OrderTimeInForce("ImmediateOrCancel")
+    val FillOrKill = OrderTimeInForce("FillOrKill")
+  }
+
+  case class OrderState(state: String)
+  object OrderState{
+    val Failed = OrderState("Failed")
+    val Pending = OrderState("Pending")
+    val Accepted = OrderState("Accepted")
+    val Rejected = OrderState("Rejected")
+    val CancelPending = OrderState("CancelPending")
+    val Canceled = OrderState("Canceled")
+    val PartialCanceled = OrderState("PartialCanceled")
+    val Partial = OrderState("Partial")
+    val Executed = OrderState("Executed")
+    val ReplacePending = OrderState("ReplacePending")
+    val Replaced = OrderState("Replaced")
+    val Stopped = OrderState("Stopped")
+    val Suspended = OrderState("Suspended")
+    val Expired = OrderState("Expired")
+    val Queued = OrderState("Queued")
+    val Triggered = OrderState("Triggered")
+    val Activated = OrderState("Activated")
+    val PendingRiskReview = OrderState("PendingRiskReview")
+    val ContingentOrder = OrderState("ContingentOrder")
+  }
+
   case class Order(
                   id: Int,
                   symbol: String,
@@ -299,8 +352,10 @@ object Questrade {
   implicit val QuotesReads = Json.reads[Quotes]
 
   case class PostOrder(orderId: Option[Int] = None,
-                       symbolId: Int, quantity: Int,
-                       icebergQuantity: Int,
+                       symbolId: Int,
+                       quantity: Int,
+                       timeInForce: String,
+                       icebergQuantity: Option[Int],
                        limitPrice: Option[Double],
                        stopPrice: Option[Double],
                        isAllOrNone: Boolean,
@@ -308,7 +363,7 @@ object Questrade {
                        orderType: String,
                        action: String,
                        primaryRoute: String = "AUTO",
-                       secondaryRoute: String = "AUTO") extends QT
+                       secondaryRoute: String = "NYSE") extends QT
   implicit val PostOrderWrites = Json.writes[PostOrder]
   implicit val PostOrderReads = Json.reads[PostOrder]
   case class OrderResponse(orderId: Int, orders: Seq[Order]) extends QT

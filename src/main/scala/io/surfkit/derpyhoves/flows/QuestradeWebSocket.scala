@@ -79,8 +79,9 @@ class QuestradeWebSocket[T <: Questrade.QT](endpoint: () => Future[String], cred
     endpoint().map { url =>
       println(s"calling connect: ${url}")
       val ref = Flow[TextMessage]
+        .keepAlive(30 seconds, () => TextMessage(" "))
         // http://stackoverflow.com/questions/37716218/how-to-keep-connection-open-for-all-the-time-in-websockets
-        .keepAlive(25 minutes, () => TextMessage(creds().access_token))
+        //.keepAlive(25 minutes, () => TextMessage(creds().access_token))
         .viaMat(webSocketFlow(url))(Keep.right) // keep the materialized Future[WebSocketUpgradeResponse]
         .toMat(incoming)(Keep.both) // also keep the Future[Done]
         .runWith(outgoing)

@@ -51,9 +51,10 @@ class QuestradeSignedRequester(baseUrl: String, creds: () => Questrade.Login)(im
 
   def post[T <: Questrade.QT](path: String, post: T)(implicit uw: Writes[T]) = {
     val login = creds()
-    val data = ByteString(Json.stringify(uw.writes(post) ))
-    println(s"url: ${baseUrl}${path}")
-    Http().singleRequest(HttpRequest(method=HttpMethods.POST, uri = s"${baseUrl}${path}", entity=data).addHeader(Authorization(OAuth2BearerToken(login.access_token))))
+    val json = Json.stringify(uw.writes(post) )
+    val jsonEntity = HttpEntity(ContentTypes.`application/json`, json)
+    println(s"curl -XPOST '${baseUrl}${path}' -H 'Authorization: Bearer ${login.access_token}' -d '${json}'")
+    Http().singleRequest(HttpRequest(method=HttpMethods.POST, uri = s"${baseUrl}${path}", entity=jsonEntity).addHeader(Authorization(OAuth2BearerToken(login.access_token))))
   }
 
   def delete(path: String) = {

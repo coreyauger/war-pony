@@ -22,7 +22,7 @@ object Main extends App{
     implicit val materializer = ActorMaterializer(ActorMaterializerSettings(system).withSupervisionStrategy(decider))
 
     try {
-      val api = new QuestradeApi(false)
+      val api = new QuestradeApi(true)
       import Questrade._
 
       val sx = api.search("BABA")
@@ -44,6 +44,7 @@ object Main extends App{
 
       val account = f.accounts.head
 
+      /*
       val px = api.positions(account.number)
       val p =  Await.result(px, 10 seconds)
       println(s"px: ${p}")
@@ -76,8 +77,55 @@ object Main extends App{
       val l1 = api.l1Stream(Set(s.symbols.head.symbolId))
       l1.subscribe({ quote: Questrade.Quotes =>
         println(s"GOT QUOTE: ${quote}")
-      })
+      })*/
 
+      val notifications = api.notifications
+      notifications.subscribe{ orders: Questrade.Orders =>
+        println(s"GOT ORDER NOTIFICATION: ${orders}")
+        orders.orders.foreach{ order =>
+          order.state match{
+            case Questrade.OrderState.Executed.state if order.orderType == OrderType.Market.name && order.side == OrderAction.Buy.action =>
+              val price = order.priceInfo.avgExecPrice.getOrElse(0.0)
+              // set the stops
+              val stop = Questrade.PostOrder(
+                orderId = None,
+                symbolId = order.symbolId,
+                timeInForce = Questrade.OrderTimeInForce.Day.name,
+                quantity = order.quantityInfo.filledQuantity.getOrElse(0),
+                icebergQuantity = None,
+                limitPrice = None,
+                stopPrice = Some( Math.round((price*0.0004)*1000.0).toDouble / 1000.0 ),
+                isAllOrNone = false,
+                isAnonymous = false,
+                orderType = Questrade.OrderType.TrailStopInDollar.name,
+                action = Questrade.OrderAction.Sell.action
+              )
+              api.order(account.number, stop)
+
+            case Questrade.OrderState.Executed.state if order.side == OrderAction.Sell.action =>
+              println("WE DID A SELL !!!!")
+          }
+        }
+
+      }
+
+      Thread.sleep(4000)
+
+      val buyF = api.order(account.number, Questrade.PostOrder(
+        orderId = None,
+        timeInForce = Questrade.OrderTimeInForce.FillOrKill.name,
+        symbolId = s.symbols.head.symbolId,
+        quantity = 1,
+        icebergQuantity = None,
+        limitPrice = None,
+        stopPrice = None,
+        isAllOrNone = false,
+        isAnonymous = true,
+        orderType = Questrade.OrderType.Market.name,
+        action = Questrade.OrderAction.Buy.action
+      ))
+      val buy =  Await.result(buyF, 10 seconds)
+      println(s"buy: ${buy}")
 
       Thread.currentThread.join()
     }catch{
