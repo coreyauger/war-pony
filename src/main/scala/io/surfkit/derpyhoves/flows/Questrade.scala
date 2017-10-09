@@ -445,14 +445,19 @@ class QuestradeApi(practice: Boolean = false, tokenProvider: Option[() => Future
     if(practice) s"https://practicelogin.questrade.com/oauth2/token?grant_type=refresh_token&refresh_token=${refreshToken}"
     else s"https://login.questrade.com/oauth2/token?grant_type=refresh_token&refresh_token=${refreshToken}"
 
-  def refresh(when: FiniteDuration): Cancellable = system.scheduler.scheduleOnce(when) {
-    def updateToken(l: Questrade.Login): Unit = {
-      refresh(l.expires_in seconds)
-      creds = l
-    }
-    tokenProvider match{
-      case Some(tp) => tp().foreach(updateToken)
-      case _ => login().foreach(updateToken)
+  def refresh(when: FiniteDuration): Cancellable = {
+    println(s"QuestradeApi refresh token in ${when}")
+    system.scheduler.scheduleOnce(when) {
+      def updateToken(l: Questrade.Login): Unit = {
+        println(s"QuestradeApi updated token: ${l}")
+        refresh(l.expires_in seconds)
+        creds = l
+      }
+
+      tokenProvider match {
+        case Some(tp) => tp().foreach(updateToken)
+        case _ => login().foreach(updateToken)
+      }
     }
   }
 
