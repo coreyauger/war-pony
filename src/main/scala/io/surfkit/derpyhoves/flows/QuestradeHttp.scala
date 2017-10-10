@@ -9,6 +9,7 @@ import akka.http.scaladsl.client.RequestBuilding
 import akka.http.scaladsl.model._
 import akka.stream.scaladsl.Source
 import akka.util.ByteString
+import scala.concurrent.Future
 import org.joda.time.DateTimeZone
 import org.joda.time.DateTime
 import play.api.libs.json.{Json, Writes}
@@ -42,24 +43,32 @@ class QuestradePoller(creds: () => Questrade.Login,path: String, interval: Quest
 }
 
 
-class QuestradeSignedRequester(baseUrl: String, creds: () => Questrade.Login)(implicit system: ActorSystem, materializer: Materializer){
+class QuestradeSignedRequester(creds: () => Future[Questrade.Login])(implicit system: ActorSystem, materializer: Materializer){
+  import system.dispatcher
+
   def get(path: String) = {
-    val login = creds()
-    println(s"curl -XGET '${baseUrl}${path}' -H 'Authorization: Bearer ${login.access_token}'")
-    Http().singleRequest(HttpRequest(uri = s"${baseUrl}${path}").addHeader(Authorization(OAuth2BearerToken(login.access_token))))
+    creds().flatMap { login =>
+      val baseUrl = s"${login.api_server}v1/"
+      println(s"curl -XGET '${baseUrl}${path}' -H 'Authorization: Bearer ${login.access_token}'")
+      Http().singleRequest(HttpRequest(uri = s"${baseUrl}${path}").addHeader(Authorization(OAuth2BearerToken(login.access_token))))
+    }
   }
 
   def post[T <: Questrade.QT](path: String, post: T)(implicit uw: Writes[T]) = {
-    val login = creds()
-    val json = Json.stringify(uw.writes(post) )
-    val jsonEntity = HttpEntity(ContentTypes.`application/json`, json)
-    println(s"curl -XPOST '${baseUrl}${path}' -H 'Authorization: Bearer ${login.access_token}' -d '${json}'")
-    Http().singleRequest(HttpRequest(method=HttpMethods.POST, uri = s"${baseUrl}${path}", entity=jsonEntity).addHeader(Authorization(OAuth2BearerToken(login.access_token))))
+    creds().flatMap { login =>
+      val baseUrl = s"${login.api_server}v1/"
+      val json = Json.stringify(uw.writes(post))
+      val jsonEntity = HttpEntity(ContentTypes.`application/json`, json)
+      println(s"curl -XPOST '${baseUrl}${path}' -H 'Authorization: Bearer ${login.access_token}' -d '${json}'")
+      Http().singleRequest(HttpRequest(method = HttpMethods.POST, uri = s"${baseUrl}${path}", entity = jsonEntity).addHeader(Authorization(OAuth2BearerToken(login.access_token))))
+    }
   }
 
   def delete(path: String) = {
-    val login = creds()
-    println(s"url: ${baseUrl}${path}")
-    Http().singleRequest(HttpRequest(method=HttpMethods.DELETE, uri = s"${baseUrl}${path}").addHeader(Authorization(OAuth2BearerToken(login.access_token))))
+    creds().flatMap { login =>
+      val baseUrl = s"${login.api_server}v1/"
+      println(s"url: ${baseUrl}${path}")
+      Http().singleRequest(HttpRequest(method = HttpMethods.DELETE, uri = s"${baseUrl}${path}").addHeader(Authorization(OAuth2BearerToken(login.access_token))))
+    }
   }
 }

@@ -13,13 +13,13 @@ import com.typesafe.sslconfig.akka.AkkaSSLConfig
 import io.surfkit.derpyhoves.actors.WsActor
 
 import scala.concurrent.duration._
-import scala.concurrent.Future
+import scala.concurrent.{Await, Future}
 import scala.reflect._
 import java.io.Serializable
 
 import play.api.libs.json.{Json, Reads}
 
-class QuestradeWebSocket[T <: Questrade.QT](endpoint: () => Future[String], creds: () => Questrade.Login)(implicit val system: ActorSystem, um: Reads[T]) extends Serializable {
+class QuestradeWebSocket[T <: Questrade.QT](endpoint: () => Future[String], creds: () => Future[Questrade.Login])(implicit val system: ActorSystem, um: Reads[T]) extends Serializable {
   import system.dispatcher
 
   private[this] val decider: Supervision.Decider = {
@@ -70,8 +70,9 @@ class QuestradeWebSocket[T <: Questrade.QT](endpoint: () => Future[String], cred
 
   val defaultSSLConfig = AkkaSSLConfig.get(system)
 
+  // FIXME: uhg how to get away from this Await here.. :(
   def webSocketFlow(url: String) = Http().webSocketClientFlow(WebSocketRequest(url, extraHeaders =
-    scala.collection.immutable.Seq(Authorization(OAuth2BearerToken(creds().access_token)))
+    scala.collection.immutable.Seq(Authorization(OAuth2BearerToken(Await.result(creds(), 5 seconds).access_token)))
   ),connectionContext = Http().createClientHttpsContext(AkkaSSLConfig()))
 
   def connect:Future[ActorRef] = {
