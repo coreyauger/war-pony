@@ -446,9 +446,9 @@ class QuestradeApi(practice: Boolean = false, tokenProvider: Option[() => Future
     else s"https://login.questrade.com/oauth2/token?grant_type=refresh_token&refresh_token=${refreshToken}"
 
   def refresh(when: FiniteDuration): Cancellable = {
-    promise = Promise[Questrade.Login]()
     println(s"QuestradeApi refresh token in ${when}")
     system.scheduler.scheduleOnce(when) {
+      promise = Promise[Questrade.Login]()
       def updateToken(l: Questrade.Login): Unit = {
         println(s"QuestradeApi updated token: ${l}")
         refresh(l.expires_in seconds)
