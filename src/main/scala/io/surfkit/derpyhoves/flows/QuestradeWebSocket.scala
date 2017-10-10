@@ -77,7 +77,10 @@ class QuestradeWebSocket[T <: Questrade.QT](endpoint: () => Future[String], cred
 
   def connect:Future[ActorRef] = {
     println("call connect")
-    endpoint().map { url =>
+    for{
+      url <- endpoint()
+      login <- creds()
+    }yield{
       println(s"calling connect: ${url}")
       val ref = Flow[TextMessage]
         .keepAlive(30 seconds, () => TextMessage(" "))
@@ -86,7 +89,7 @@ class QuestradeWebSocket[T <: Questrade.QT](endpoint: () => Future[String], cred
         .viaMat(webSocketFlow(url))(Keep.right) // keep the materialized Future[WebSocketUpgradeResponse]
         .toMat(incoming)(Keep.both) // also keep the Future[Done]
         .runWith(outgoing)
-      ref ! creds()
+      ref ! login
       ref
     }
   }
