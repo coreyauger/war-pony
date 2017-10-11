@@ -79,7 +79,6 @@ class QuestradeWebSocket[T <: Questrade.QT](endpoint: (Questrade.Login) => Futur
   ),connectionContext = Http().createClientHttpsContext(AkkaSSLConfig()))
 
   def connect:Future[ActorRef] = {
-    println("call connect")
     for{
       login <- creds()
       url <- endpoint(login)
