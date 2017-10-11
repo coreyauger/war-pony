@@ -19,7 +19,7 @@ import java.io.Serializable
 
 import play.api.libs.json.{Json, Reads}
 
-class QuestradeWebSocket[T <: Questrade.QT](endpoint: () => Future[String], creds: () => Future[Questrade.Login])(implicit val system: ActorSystem, um: Reads[T]) extends Serializable {
+class QuestradeWebSocket[T <: Questrade.QT](endpoint: (Questrade.Login) => Future[String], creds: () => Future[Questrade.Login])(implicit val system: ActorSystem, um: Reads[T]) extends Serializable {
   import system.dispatcher
 
   private[this] val decider: Supervision.Decider = {
@@ -72,16 +72,16 @@ class QuestradeWebSocket[T <: Questrade.QT](endpoint: () => Future[String], cred
 
   // FIXME: uhg how to get away from this Await here.. :(
   def webSocketFlow(url: String) = Http().webSocketClientFlow(WebSocketRequest(url, extraHeaders =
-    scala.collection.immutable.Seq(Authorization(OAuth2BearerToken(Await.result(creds(), 5 seconds).access_token)))
+    scala.collection.immutable.Seq(Authorization(OAuth2BearerToken(Await.result(creds(), 15 seconds).access_token)))
   ),connectionContext = Http().createClientHttpsContext(AkkaSSLConfig()))
 
   def connect:Future[ActorRef] = {
     println("call connect")
     for{
-      url <- endpoint()
       login <- creds()
+      url <- endpoint(login)
     }yield{
-      println(s"calling connect: ${url}")
+      println(s"ws calling connect: ${url} width login: ${login}")
       val ref = Flow[TextMessage]
         .keepAlive(30 seconds, () => TextMessage(" "))
         // http://stackoverflow.com/questions/37716218/how-to-keep-connection-open-for-all-the-time-in-websockets
@@ -94,7 +94,7 @@ class QuestradeWebSocket[T <: Questrade.QT](endpoint: () => Future[String], cred
     }
   }
 
-  println(s"call connect: ${endpoint}")
+  println(s"ws call connect")
   connect
   var cancel: Option[Cancellable] = None
 

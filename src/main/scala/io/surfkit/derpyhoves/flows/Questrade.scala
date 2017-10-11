@@ -451,7 +451,7 @@ class QuestradeApi(practice: Boolean = false, tokenProvider: Option[() => Future
       println("QuestradeApi refeshing token.")
       promise = Promise[Questrade.Login]()
       def updateToken(l: Questrade.Login): Unit = {
-        println(s"QuestradeApi updated token: ${l}")
+        println(s"QuestradeApi got updated token: ${l}")
         refresh(l.expires_in seconds)
         promise.complete(Try(l))
       }
@@ -520,11 +520,11 @@ class QuestradeApi(practice: Boolean = false, tokenProvider: Option[() => Future
     httpApi.get(s"markets/quotes?ids=${ids.mkString("",",","")}&stream=true&mode=WebSocket").flatMap(x => unmarshal(x) )
 
   def notifications(implicit um: Reads[Questrade.Orders]) =
-    new QuestradeWebSocket[Questrade.Orders](() => notificationStreamPort.map(sp =>  s"wss://${new URL(Await.result(getCreds, 5 seconds).api_server).getHost}:${sp.streamPort}"), getCreds _ )
+    new QuestradeWebSocket[Questrade.Orders]((login: Questrade.Login) => notificationStreamPort.map(sp =>  s"wss://${new URL(login.api_server).getHost}:${sp.streamPort}"), getCreds _ )
 
   //GET https://api01.iq.questrade.com/v1/markets/quotes?ids=9291,8049&stream=true&mode=WebSocket
   def l1Stream(ids: Set[Int]) =
-    new QuestradeWebSocket[Questrade.Quotes]( () => l1StreamPort(ids).map(sp => s"wss://${new URL(Await.result(getCreds, 5 seconds).api_server).getHost}:${sp.streamPort}"), getCreds _ )
+    new QuestradeWebSocket[Questrade.Quotes]( (login: Questrade.Login) => l1StreamPort(ids).map(sp => s"wss://${new URL(login.api_server).getHost}:${sp.streamPort}"), getCreds _ )
 
 
 
