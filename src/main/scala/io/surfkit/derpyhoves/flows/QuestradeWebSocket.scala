@@ -70,9 +70,12 @@ class QuestradeWebSocket[T <: Questrade.QT](endpoint: (Questrade.Login) => Futur
 
   val defaultSSLConfig = AkkaSSLConfig.get(system)
 
+  def getAccessToken =
+    Await.result(creds(), 15 seconds).access_token
+
   // FIXME: uhg how to get away from this Await here.. :(
   def webSocketFlow(url: String) = Http().webSocketClientFlow(WebSocketRequest(url, extraHeaders =
-    scala.collection.immutable.Seq(Authorization(OAuth2BearerToken(Await.result(creds(), 15 seconds).access_token)))
+    scala.collection.immutable.Seq(Authorization(OAuth2BearerToken(getAccessToken)))
   ),connectionContext = Http().createClientHttpsContext(AkkaSSLConfig()))
 
   def connect:Future[ActorRef] = {
