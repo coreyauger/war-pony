@@ -96,6 +96,7 @@ class QuestradeWebSocket[T <: Questrade.QT](endpoint: (Questrade.Login) => Futur
       ref*/
       val (killSwitch, closed) =
         outgoing(login)
+          .keepAlive(45 seconds, () => TextMessage(""))
           .viaMat(webSocketFlow(url))(Keep.right) // keep the materialized Future[WebSocketUpgradeResponse]
           .viaMat(KillSwitches.single)(Keep.right)
           .toMat(incoming)(Keep.both) // also keep the Future[Done]
@@ -115,6 +116,7 @@ class QuestradeWebSocket[T <: Questrade.QT](endpoint: (Questrade.Login) => Futur
   var killSwitchFuture = connect
 
   def shutdown: Future[Unit] = {
+    println("websocket SHUTDOWN.  should not restart")
     restart = false
     killSwitchFuture.map(_.shutdown())
   }
