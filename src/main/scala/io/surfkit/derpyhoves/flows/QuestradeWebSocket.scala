@@ -29,6 +29,7 @@ class QuestradeWebSocket[T <: Questrade.QT](endpoint: (Questrade.Login) => Futur
   implicit val materializer = ActorMaterializer(ActorMaterializerSettings(system).withSupervisionStrategy(decider))
 
   var responsers = Map.empty[ String, List[T => Unit] ]
+  var restart = true
 
   def callResponders(txt: String) = {
     println(s"socket: ${txt}")
@@ -36,7 +37,6 @@ class QuestradeWebSocket[T <: Questrade.QT](endpoint: (Questrade.Login) => Futur
       val model = Json.parse(txt).as[T]
       val key = model.getClass.getName
       responsers.get(key).map{ res =>
-        //println("got socket event .. calling.")
         res.foreach(_(model))
       }
     }
@@ -66,7 +66,8 @@ class QuestradeWebSocket[T <: Questrade.QT](endpoint: (Questrade.Login) => Futur
 
   // send this as a message over the WebSocket
   //val outgoing = Source.single(TextMessage("hello world!"))
-  val outgoing = Source.actorPublisher(WsActor.props[T](this))
+  //val outgoing = Source.actorPublisher(WsActor.props[T](this))
+  def outgoing(login: Questrade.Login) = Source(List(TextMessage( login.access_token ))).concatMat(Source.maybe[Message])(Keep.right)
 
   val defaultSSLConfig = AkkaSSLConfig.get(system)
 
@@ -78,13 +79,13 @@ class QuestradeWebSocket[T <: Questrade.QT](endpoint: (Questrade.Login) => Futur
     scala.collection.immutable.Seq(Authorization(OAuth2BearerToken(getAccessToken)))
   ),connectionContext = Http().createClientHttpsContext(AkkaSSLConfig()))
 
-  def connect:Future[ActorRef] = {
+  def connect:Future[UniqueKillSwitch] = {
     for{
       login <- creds()
       url <- endpoint(login)
     }yield{
       println(s"ws calling connect: ${url} width login: ${login}")
-      val ref = Flow[TextMessage]
+      /*val ref = Flow[TextMessage]
         .keepAlive(30 seconds, () => TextMessage(" "))
         // http://stackoverflow.com/questions/37716218/how-to-keep-connection-open-for-all-the-time-in-websockets
         //.keepAlive(25 minutes, () => TextMessage(creds().access_token))
@@ -92,13 +93,31 @@ class QuestradeWebSocket[T <: Questrade.QT](endpoint: (Questrade.Login) => Futur
         .toMat(incoming)(Keep.both) // also keep the Future[Done]
         .runWith(outgoing)
       ref ! login
-      ref
+      ref*/
+      val (killSwitch, closed) =
+        outgoing(login)
+          .viaMat(webSocketFlow(url))(Keep.right) // keep the materialized Future[WebSocketUpgradeResponse]
+          .viaMat(KillSwitches.single)(Keep.right)
+          .toMat(incoming)(Keep.both) // also keep the Future[Done]
+          .run()
+      closed.map{_ =>
+        println("Socket close...")
+        if(restart) {
+          println("reconnecting ..")
+          killSwitchFuture = connect
+        }
+      }
+      killSwitch
     }
   }
 
   println(s"ws call connect")
-  connect
-  var cancel: Option[Cancellable] = None
+  var killSwitchFuture = connect
+
+  def shutdown = {
+    restart = false
+    killSwitchFuture.foreach(_.shutdown())
+  }
 
   def subscribe[T : ClassTag](handler: T => Unit ) = {
     val key = classTag[T].runtimeClass.getName

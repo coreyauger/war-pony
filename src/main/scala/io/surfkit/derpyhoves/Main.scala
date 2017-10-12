@@ -73,12 +73,11 @@ object Main extends App{
 
       val ticker = QuestradeOneMinuteTicker(api.getCreds _, s.symbols.head.symbolId)
       ticker.json.runForeach(i => i.foreach(x => println(s"meep: ${x}")) )(materializer)
-
+*/
       val l1 = api.l1Stream(Set(s.symbols.head.symbolId))
       l1.subscribe({ quote: Questrade.Quotes =>
         println(s"GOT QUOTE: ${quote}")
-      })*/
-
+      })
       val notifications = api.notifications
       notifications.subscribe{ orders: Questrade.Orders =>
         println(s"GOT ORDER NOTIFICATION: ${orders}")
@@ -109,23 +108,6 @@ object Main extends App{
 
       }
 
-      Thread.sleep(4000)
-
-      val buyF = api.order(account.number, Questrade.PostOrder(
-        orderId = None,
-        timeInForce = Questrade.OrderTimeInForce.FillOrKill.name,
-        symbolId = s.symbols.head.symbolId,
-        quantity = 1,
-        icebergQuantity = None,
-        limitPrice = None,
-        stopPrice = None,
-        isAllOrNone = false,
-        isAnonymous = true,
-        orderType = Questrade.OrderType.Market.name,
-        action = Questrade.OrderAction.Buy.action
-      ))
-      val buy =  Await.result(buyF, 10 seconds)
-      println(s"buy: ${buy}")
 
       Thread.currentThread.join()
     }catch{
