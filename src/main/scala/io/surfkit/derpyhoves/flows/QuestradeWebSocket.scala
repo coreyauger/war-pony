@@ -114,9 +114,9 @@ class QuestradeWebSocket[T <: Questrade.QT](endpoint: (Questrade.Login) => Futur
   println(s"ws call connect")
   var killSwitchFuture = connect
 
-  def shutdown = {
+  def shutdown: Future[Unit] = {
     restart = false
-    killSwitchFuture.foreach(_.shutdown())
+    killSwitchFuture.map(_.shutdown())
   }
 
   def subscribe[T : ClassTag](handler: T => Unit ) = {
