@@ -32,13 +32,14 @@ class QuestradeWebSocket[T <: Questrade.QT](endpoint: (Questrade.Login) => Futur
   var restart = true
 
   def callResponders(txt: String) = {
-    println(s"socket: ${txt}")
     if(!txt.contains("success")){
       val model = Json.parse(txt).as[T]
       val key = model.getClass.getName
       responsers.get(key).map{ res =>
         res.foreach(_(model))
       }
+    }else{
+      println(s"socket: ${txt}")
     }
   }
 
