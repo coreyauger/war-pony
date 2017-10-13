@@ -439,16 +439,15 @@ object Questrade {
   implicit val PostBracketWrites = Json.writes[PostBracket]
   implicit val PostBracketReads = Json.reads[PostBracket]
 
-  def intervalParams(interval:Questrade.Interval) = {
+  def intervalParams(interval: Interval)(duration: FiniteDuration) = {
     val endTime = DateTime.now().secondOfMinute().setCopy(0)
-    val startTime = endTime.plusSeconds(-interval.toDuration.toSeconds.toInt)
+    val startTime = endTime.plusSeconds(-duration.toSeconds.toInt)
     s"?startTime=${startTime.toString("yyyy-MM-dd'T'HH:mm:ssZZ")}&endTime=${endTime.toString("yyyy-MM-dd'T'HH:mm:ssZZ")}&interval=${interval.period}"
   }
 }
 
-class QuestradeTicker[T <: Questrade.QT](creds: () => Questrade.Login, symbolId: Int, interval: Questrade.Interval, tz: DateTimeZone, params: Questrade.Interval => String, fuzz: Double = 6.66)(implicit system: ActorSystem, materializer: Materializer, um: Reads[T]) extends QuestradePoller(
-  creds = creds, path = s"v1/markets/candles/${symbolId}", interval = interval, fuzz = fuzz, params = params, hoursOpt = Some(tz)) with PlayJsonSupport{
-
+class QuestradeTicker[T <: Questrade.QT](creds: () => Questrade.Login, symbolId: Int, interval: Questrade.Interval, tz: DateTimeZone, params: FiniteDuration => String, fuzz: Double = 6.66)(implicit system: ActorSystem, materializer: Materializer, um: Reads[T]) extends QuestradePoller(
+  creds = creds, path = s"v1/markets/candles/${symbolId}", interval = interval.toDuration, fuzz = fuzz, params = params, hoursOpt = Some(tz)) with PlayJsonSupport{
   def json(): Source[Future[T], Cancellable] = super.apply().map{
     case scala.util.Success(response) => Unmarshal(response.entity).to[T]
     case scala.util.Failure(ex) => Future.failed(ex)
@@ -456,22 +455,39 @@ class QuestradeTicker[T <: Questrade.QT](creds: () => Questrade.Login, symbolId:
 }
 
 case class QuestradeOneMinuteTicker(creds: () => Questrade.Login, symbolId: Int, tz: DateTimeZone = DateTimeZone.forID("US/Eastern"), fuzz: Double = 6.66)(implicit system: ActorSystem, materializer: Materializer, um: Reads[Questrade.Candles])
-  extends QuestradeTicker[Questrade.Candles](creds, symbolId, Questrade.Interval.OneMinute, tz, params = Questrade.intervalParams, fuzz)
+  extends QuestradeTicker[Questrade.Candles](creds, symbolId, Questrade.Interval.OneMinute, tz, params = Questrade.intervalParams(Questrade.Interval.OneMinute), fuzz)
 
 case class QuestradeFifteenMinuteTicker(creds: () => Questrade.Login, symbolId: Int, tz: DateTimeZone = DateTimeZone.forID("US/Eastern"), fuzz: Double = 6.66)(implicit system: ActorSystem, materializer: Materializer, um: Reads[Questrade.Candles])
-  extends QuestradeTicker[Questrade.Candles](creds, symbolId, Questrade.Interval.FifteenMinutes, tz, params = Questrade.intervalParams, fuzz)
+  extends QuestradeTicker[Questrade.Candles](creds, symbolId, Questrade.Interval.FifteenMinutes, tz, params = Questrade.intervalParams(Questrade.Interval.OneMinute), fuzz)
 
 case class QuestradeThirtyMinuteTicker(creds: () => Questrade.Login, symbolId: Int, tz: DateTimeZone = DateTimeZone.forID("US/Eastern"), fuzz: Double = 6.66)(implicit system: ActorSystem, materializer: Materializer, um: Reads[Questrade.Candles])
-  extends QuestradeTicker[Questrade.Candles](creds, symbolId, Questrade.Interval.HalfHour, tz, params = Questrade.intervalParams, fuzz)
+  extends QuestradeTicker[Questrade.Candles](creds, symbolId, Questrade.Interval.HalfHour, tz, params = Questrade.intervalParams(Questrade.Interval.OneMinute), fuzz)
 
 case class QuestradeOneHourTicker(creds: () => Questrade.Login, symbolId: Int, tz: DateTimeZone = DateTimeZone.forID("US/Eastern"), fuzz: Double = 6.66)(implicit system: ActorSystem, materializer: Materializer, um: Reads[Questrade.Candles])
-  extends QuestradeTicker[Questrade.Candles](creds, symbolId, Questrade.Interval.OneHour, tz, params = Questrade.intervalParams, fuzz)
+  extends QuestradeTicker[Questrade.Candles](creds, symbolId, Questrade.Interval.OneHour, tz, params = Questrade.intervalParams(Questrade.Interval.OneMinute), fuzz)
 
+
+class QuestradeQuoter[T <: Questrade.QT](creds: () => Questrade.Login, symbolId: Int, interval: FiniteDuration, tz: DateTimeZone)(implicit system: ActorSystem, materializer: Materializer, um: Reads[T]) extends QuestradePoller(
+  creds = creds, path = s"v1/markets/quotes/${symbolId}", interval = interval, fuzz = 0, params = { _:FiniteDuration => ""}, hoursOpt = Some(tz), alignMinute = false) with PlayJsonSupport{
+  def json(): Source[Future[T], Cancellable] = super.apply().map{
+    case scala.util.Success(response) => Unmarshal(response.entity).to[T]
+    case scala.util.Failure(ex) => Future.failed(ex)
+  }
+}
+
+case class QuestradeFiveSecondQuotes(creds: () => Questrade.Login, symbolId: Int, tz: DateTimeZone = DateTimeZone.forID("US/Eastern"))(implicit system: ActorSystem, materializer: Materializer, um: Reads[Questrade.Quotes])
+  extends QuestradeQuoter[Questrade.Quotes](creds, symbolId, 5 seconds, tz)
+
+case class QuestradeTenSecondQuotes(creds: () => Questrade.Login, symbolId: Int, tz: DateTimeZone = DateTimeZone.forID("US/Eastern"))(implicit system: ActorSystem, materializer: Materializer, um: Reads[Questrade.Quotes])
+  extends QuestradeQuoter[Questrade.Quotes](creds, symbolId, 10 seconds, tz)
+
+case class QuestradeFifteenSecondQuotes(creds: () => Questrade.Login, symbolId: Int, tz: DateTimeZone = DateTimeZone.forID("US/Eastern"))(implicit system: ActorSystem, materializer: Materializer, um: Reads[Questrade.Quotes])
+  extends QuestradeQuoter[Questrade.Quotes](creds, symbolId, 15 seconds, tz)
 
 case class QuestradeRefresh(creds: () => Questrade.Login, practice: Boolean)(implicit system: ActorSystem, materializer: Materializer, um: Reads[Questrade.Candles]) extends QuestradePoller(
   creds = () => { Questrade.Login("","",0, "", "") },
   path = if(practice) s"https://practicelogin.questrade.com/oauth2/token" else s"https://login.questrade.com/oauth2/token",
-  interval = Questrade.Interval.OneHour, fuzz = 0.0, params = {i:Questrade.Interval =>
+  interval = 30 minutes, fuzz = 0.0, params = {_:FiniteDuration =>
     s"?grant_type=refresh_token&refresh_token=${creds().refresh_token}"
   }, hoursOpt = None) with PlayJsonSupport {
 

@@ -9,10 +9,13 @@ import akka.http.scaladsl.client.RequestBuilding
 import akka.http.scaladsl.model._
 import akka.stream.scaladsl.Source
 import akka.util.ByteString
+
 import scala.concurrent.Future
 import org.joda.time.DateTimeZone
 import org.joda.time.DateTime
 import play.api.libs.json.{Json, Writes}
+
+import scala.concurrent.duration.FiniteDuration
 import scala.util.Try
 
 /**
@@ -20,7 +23,7 @@ import scala.util.Try
   */
 
 
-class QuestradePoller(creds: () => Questrade.Login,path: String, interval: Questrade.Interval, fuzz: Double, hoursOpt: Option[DateTimeZone] = None, params: Questrade.Interval => String)(implicit system: ActorSystem, materializer: Materializer) {
+class QuestradePoller(creds: () => Questrade.Login, path: String, interval: FiniteDuration, fuzz: Double, hoursOpt: Option[DateTimeZone] = None, params: FiniteDuration => String, alignMinute: Boolean = true)(implicit system: ActorSystem, materializer: Materializer) {
   import scala.concurrent.duration._
 
   def request: akka.http.scaladsl.model.HttpRequest = {
@@ -29,8 +32,10 @@ class QuestradePoller(creds: () => Questrade.Login,path: String, interval: Quest
     println(s"curl -XGET '${url}' -H 'Authorization: Bearer ${accessToken}'")
     RequestBuilding.Get(Uri(url)).addHeader(Authorization(OAuth2BearerToken(creds().access_token)))
   }
-  val initialDelat = (60.0-DateTime.now.getSecondOfMinute.toDouble) + (Math.random() * fuzz + 1.0)    // set to the end of the minute plus some fuzzy
-  val source: Source[() => HttpRequest, Cancellable] = Source.tick(initialDelat.seconds, interval.toDuration, request _).filter{ _ =>
+  val initialDelat =
+    if(alignMinute)(60.0-DateTime.now.getSecondOfMinute.toDouble) + (Math.random() * fuzz + 1.0)    // set to the end of the minute plus some fuzzy
+    else 0
+  val source: Source[() => HttpRequest, Cancellable] = Source.tick(initialDelat.seconds, interval, request _).filter{ _ =>
     hoursOpt.map{ timezone =>
       val dt = new DateTime(timezone)
       dt.getHourOfDay >= 8 && dt.getHourOfDay <= 16 && dt.getDayOfWeek() >= org.joda.time.DateTimeConstants.MONDAY && dt.getDayOfWeek() <= org.joda.time.DateTimeConstants.FRIDAY
