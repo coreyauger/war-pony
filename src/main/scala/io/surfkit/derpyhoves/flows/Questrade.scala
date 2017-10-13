@@ -158,6 +158,13 @@ object Questrade {
     val LimitOnClose = OrderType("LimitOnClose")
   }
 
+  case class OrderClass(name: String)
+  object OrderClass{
+    val Primary = OrderClass("Primary") // Primary order
+    val Limit = OrderClass("Limit") 	//Profit exit order
+    val StopLoss = OrderClass("StopLoss") // Loss exit order
+  }
+
   case class OrderTimeInForce(name: String)
   object OrderTimeInForce{
     val Day = OrderTimeInForce("Day")
@@ -379,6 +386,59 @@ object Questrade {
   implicit val StreamPortWrites = Json.writes[StreamPort]
   implicit val StreamPortReads = Json.reads[StreamPort]
 
+  case class BracketOrder(orderId:Option[Int],  //Order ID of active order, or 0 for new order
+                            quantity: Option[Int],
+                            action: Option[String],  // Order Action
+                            limitPrice: Option[Double],
+                            stopPrice: Option[Double],
+                            orderType: Option[String],
+                            timeInForce: Option[String],
+                            orderClass: String
+                           )
+  implicit val BracketOrderWrites = Json.writes[BracketOrder]
+  implicit val BracketOrderReads = Json.reads[BracketOrder]
+
+  /*trait BracketOrder extends QT{
+    def orderClass: String
+  }
+  case class BracketPrimary(orderId:Option[Int],  //Order ID of active order, or 0 for new order
+                          quantity: Option[Double],
+                          action: Option[String],  // Order Action
+                          limitPrice: Option[Double],
+                          stopPrice: Option[Double],
+                          orderType: Option[String],
+                          timeInForce: Option[String],
+                          orderClass: String
+                         ) extends BracketOrder
+  implicit val BracketPrimaryWrites = Json.writes[BracketPrimary]
+  implicit val BracketPrimaryReads = Json.reads[BracketPrimary]
+
+  case class BracketStop(quantity: Double,
+                         action: String = OrderAction.Sell.action,
+                         orderClass: String = OrderClass.StopLoss.name,
+                         timeInForce: String,
+                         orderType: String = OrderType.Stop.name,
+                         stopPrice: Double,
+                         limitPrice: Option[Double]) extends BracketOrder
+  implicit val BracketStopWrites = Json.writes[BracketStop]
+  implicit val BracketStopReads = Json.reads[BracketStop]
+
+  case class BracketLimit(quantity: Double,
+                         action: String = OrderAction.Sell.action,
+                         orderClass: String = OrderClass.Limit.name,
+                         timeInForce: String,
+                         orderType: String = OrderType.Limit.name,
+                         limitPrice: Option[Double]) extends BracketOrder
+  implicit val BracketLimitWrites = Json.writes[BracketLimit]
+  implicit val BracketLimitReads = Json.reads[BracketLimit]*/
+
+  case class PostBracket(symbolId: Int,
+                         primaryRoute: String = "AUTO",
+                         secondaryRoute: String = "NYSE",
+                         components: Seq[BracketOrder]) extends QT
+  implicit val PostBracketWrites = Json.writes[PostBracket]
+  implicit val PostBracketReads = Json.reads[PostBracket]
+
   def intervalParams(interval:Questrade.Interval) = {
     val endTime = DateTime.now().secondOfMinute().setCopy(0)
     val startTime = endTime.plusSeconds(-interval.toDuration.toSeconds.toInt)
@@ -509,6 +569,9 @@ class QuestradeApi(practice: Boolean = false, tokenProvider: Option[() => Future
 
   def order(account: String, post: Questrade.PostOrder)(implicit um: Reads[Questrade.OrderResponse],uw: Writes[Questrade.PostOrder]) =
     httpApi.post[Questrade.PostOrder](s"accounts/${account}/orders${post.orderId.map(x => s"/${x}").getOrElse("")}", post).flatMap(x => unmarshal(x))
+
+  def bracket(account: String, post: Questrade.PostBracket)(implicit um: Reads[Questrade.OrderResponse],uw1: Writes[Questrade.BracketOrder]) =
+    httpApi.post[Questrade.PostBracket](s"accounts/${account}/orders/bracket", post).flatMap(x => unmarshal(x))
 
   def cancel(account: String, order: String)(implicit um: Reads[Questrade.OrderCancelConfirm]) =
     httpApi.delete(s"accounts/${account}/orders/${order}").flatMap(x => unmarshal(x))
