@@ -484,6 +484,22 @@ case class QuestradeTenSecondQuotes(creds: () => Questrade.Login, symbolId: Int,
 case class QuestradeFifteenSecondQuotes(creds: () => Questrade.Login, symbolId: Int, tz: DateTimeZone = DateTimeZone.forID("US/Eastern"))(implicit system: ActorSystem, materializer: Materializer, um: Reads[Questrade.Quotes])
   extends QuestradeQuoter[Questrade.Quotes](creds, symbolId, 15 seconds, tz)
 
+
+class OrderPoller[T <: Questrade.QT](creds: () => Questrade.Login, account: String, stateFilter: Questrade.OrderStateFilter = Questrade.OrderStateFilter.All
+                                          , interval: FiniteDuration)(implicit system: ActorSystem, materializer: Materializer, um: Reads[T]) extends QuestradePoller(
+  creds = creds, path = s"accounts/${account}/orders?stateFilter=${stateFilter.state}", interval = interval, fuzz = 0, params = { _:FiniteDuration => ""}, hoursOpt = None, alignMinute = false) with PlayJsonSupport{
+  def json(): Source[Future[T], Cancellable] = super.apply().map{
+    case scala.util.Success(response) => Unmarshal(response.entity).to[T]
+    case scala.util.Failure(ex) => Future.failed(ex)
+  }
+}
+
+case class QuestradeFiveSecondOrders(creds: () => Questrade.Login, account: String, stateFilter: Questrade.OrderStateFilter = Questrade.OrderStateFilter.All)(implicit system: ActorSystem, materializer: Materializer, um: Reads[Questrade.Orders])
+  extends OrderPoller[Questrade.Orders](creds, account, stateFilter, 5 seconds)
+
+case class QuestradeTenSecondOrders(creds: () => Questrade.Login, account: String, stateFilter: Questrade.OrderStateFilter = Questrade.OrderStateFilter.All)(implicit system: ActorSystem, materializer: Materializer, um: Reads[Questrade.Orders])
+  extends OrderPoller[Questrade.Orders](creds, account, stateFilter, 10 seconds)
+
 case class QuestradeRefresh(creds: () => Questrade.Login, practice: Boolean)(implicit system: ActorSystem, materializer: Materializer, um: Reads[Questrade.Candles]) extends QuestradePoller(
   creds = () => { Questrade.Login("","",0, "", "") },
   path = if(practice) s"https://practicelogin.questrade.com/oauth2/token" else s"https://login.questrade.com/oauth2/token",
