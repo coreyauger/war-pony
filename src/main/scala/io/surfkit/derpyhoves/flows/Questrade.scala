@@ -358,8 +358,7 @@ object Questrade {
   implicit val QuotesWrites = Json.writes[Quotes]
   implicit val QuotesReads = Json.reads[Quotes]
 
-  case class PostOrder(orderId: Option[Int] = None,
-                       symbolId: Int,
+  case class PostOrder(symbolId: Int,
                        quantity: Int,
                        timeInForce: String,
                        icebergQuantity: Option[Int],
@@ -373,6 +372,17 @@ object Questrade {
                        secondaryRoute: String = "NYSE") extends QT
   implicit val PostOrderWrites = Json.writes[PostOrder]
   implicit val PostOrderReads = Json.reads[PostOrder]
+
+  case class ReplaceOrder(orderId: Int,
+                       quantity: Int,
+                       timeInForce: String,
+                       limitPrice: Option[Double],
+                       stopPrice: Option[Double],
+                       isAllOrNone: Boolean,
+                       isAnonymous: Boolean,
+                       orderType: String) extends QT
+  implicit val ReplaceOrderWrites = Json.writes[ReplaceOrder]
+  implicit val ReplaceOrderReads = Json.reads[ReplaceOrder]
   case class OrderResponse(orderId: Int, orders: Seq[Order]) extends QT
   implicit val OrderResponseWrites = Json.writes[OrderResponse]
   implicit val OrderResponseReads = Json.reads[OrderResponse]
@@ -600,7 +610,10 @@ class QuestradeApi(practice: Boolean = false, tokenProvider: Option[() => Future
     httpApi.get(s"markets/quotes?ids=${ids.mkString("",",","")}").flatMap(x => unmarshal(x))
 
   def order(account: String, post: Questrade.PostOrder)(implicit um: Reads[Questrade.OrderResponse],uw: Writes[Questrade.PostOrder]) =
-    httpApi.post[Questrade.PostOrder](s"accounts/${account}/orders${post.orderId.map(x => s"/${x}").getOrElse("")}", post).flatMap(x => unmarshal(x))
+    httpApi.post[Questrade.PostOrder](s"accounts/${account}/orders", post).flatMap(x => unmarshal(x))
+
+  def replace(account: String, replace: Questrade.ReplaceOrder)(implicit um: Reads[Questrade.OrderResponse],uw: Writes[Questrade.ReplaceOrder]) =
+    httpApi.post[Questrade.ReplaceOrder](s"accounts/${account}/orders/${replace.orderId}", replace).flatMap(x => unmarshal(x))
 
   def bracket(account: String, post: Questrade.PostBracket)(implicit um: Reads[Questrade.OrderResponse],uw1: Writes[Questrade.BracketOrder]) =
     httpApi.post[Questrade.PostBracket](s"accounts/${account}/orders/bracket", post).flatMap(x => unmarshal(x))

@@ -87,7 +87,6 @@ object Main extends App{
               val price = order.priceInfo.avgExecPrice.getOrElse(0.0)
               // set the stops
               val stop = Questrade.PostOrder(
-                orderId = None,
                 symbolId = order.symbolId,
                 timeInForce = Questrade.OrderTimeInForce.Day.name,
                 quantity = order.quantityInfo.filledQuantity.getOrElse(0),
