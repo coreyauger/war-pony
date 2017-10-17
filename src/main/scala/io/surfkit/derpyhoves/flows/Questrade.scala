@@ -487,7 +487,7 @@ case class QuestradeFifteenSecondQuotes(creds: () => Questrade.Login, symbolId: 
 
 class OrderPoller[T <: Questrade.QT](creds: () => Questrade.Login, account: String, stateFilter: Questrade.OrderStateFilter = Questrade.OrderStateFilter.All
                                           , interval: FiniteDuration)(implicit system: ActorSystem, materializer: Materializer, um: Reads[T]) extends QuestradePoller(
-  creds = creds, path = s"accounts/${account}/orders?stateFilter=${stateFilter.state}", interval = interval, fuzz = 0, params = { _:FiniteDuration => ""}, hoursOpt = None, alignMinute = false) with PlayJsonSupport{
+  creds = creds, path = s"v1/accounts/${account}/orders?stateFilter=${stateFilter.state}", interval = interval, fuzz = 0, params = { _:FiniteDuration => ""}, hoursOpt = None, alignMinute = false) with PlayJsonSupport{
   def json(): Source[Future[T], Cancellable] = super.apply().map{
     case scala.util.Success(response) => Unmarshal(response.entity).to[T]
     case scala.util.Failure(ex) => Future.failed(ex)
