@@ -376,6 +376,7 @@ object Questrade {
   case class ReplaceOrder(orderId: Int,
                        quantity: Int,
                        timeInForce: String,
+                       icebergQuantity: Option[Int],
                        limitPrice: Option[Double],
                        stopPrice: Option[Double],
                        isAllOrNone: Boolean,
