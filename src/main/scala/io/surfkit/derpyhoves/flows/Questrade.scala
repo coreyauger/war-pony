@@ -475,14 +475,14 @@ class QuestradeQuoter[T <: Questrade.QT](creds: () => Questrade.Login, symbolId:
   }
 }
 
-case class QuestradeFiveSecondQuotes(creds: () => Questrade.Login, symbolId: Int, tz: DateTimeZone = DateTimeZone.forID("US/Eastern"))(implicit system: ActorSystem, materializer: Materializer, um: Reads[Questrade.Quotes])
-  extends QuestradeQuoter[Questrade.Quotes](creds, symbolId, 5 seconds, tz)
+case class QuestradeFiveSecondQuotes(creds: () => Questrade.Login, symbolId: Int)(implicit system: ActorSystem, materializer: Materializer, um: Reads[Questrade.Quotes])
+  extends QuestradeQuoter[Questrade.Quotes](creds, symbolId, 5 seconds, DateTimeZone.forID("US/Eastern"))
 
-case class QuestradeTenSecondQuotes(creds: () => Questrade.Login, symbolId: Int, tz: DateTimeZone = DateTimeZone.forID("US/Eastern"))(implicit system: ActorSystem, materializer: Materializer, um: Reads[Questrade.Quotes])
-  extends QuestradeQuoter[Questrade.Quotes](creds, symbolId, 10 seconds, tz)
+case class QuestradeTenSecondQuotes(creds: () => Questrade.Login, symbolId: Int)(implicit system: ActorSystem, materializer: Materializer, um: Reads[Questrade.Quotes])
+  extends QuestradeQuoter[Questrade.Quotes](creds, symbolId, 10 seconds, DateTimeZone.forID("US/Eastern"))
 
-case class QuestradeFifteenSecondQuotes(creds: () => Questrade.Login, symbolId: Int, tz: DateTimeZone = DateTimeZone.forID("US/Eastern"))(implicit system: ActorSystem, materializer: Materializer, um: Reads[Questrade.Quotes])
-  extends QuestradeQuoter[Questrade.Quotes](creds, symbolId, 15 seconds, tz)
+case class QuestradeFifteenSecondQuotes(creds: () => Questrade.Login, symbolId: Int)(implicit system: ActorSystem, materializer: Materializer, um: Reads[Questrade.Quotes])
+  extends QuestradeQuoter[Questrade.Quotes](creds, symbolId, 15 seconds, DateTimeZone.forID("US/Eastern"))
 
 
 class OrderPoller[T <: Questrade.QT](creds: () => Questrade.Login, account: String, stateFilter: Questrade.OrderStateFilter = Questrade.OrderStateFilter.All
