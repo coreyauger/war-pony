@@ -529,8 +529,10 @@ case class QuestradeLogin(refreshToken: String, practice: Boolean = false)(impli
   def loginUrl =
     if(practice) s"https://practicelogin.questrade.com/oauth2/token?grant_type=refresh_token&refresh_token=${refreshToken}"
     else s"https://login.questrade.com/oauth2/token?grant_type=refresh_token&refresh_token=${refreshToken}"
-  def login()(implicit um: Reads[Questrade.Login]) =
+  def login()(implicit um: Reads[Questrade.Login]) = {
+    println(s"curl -XGET '${loginUrl}'")
     Http().singleRequest(HttpRequest(uri = loginUrl)).flatMap(x => unmarshal(x))
+  }
 }
 
 class QuestradeApi(practice: Boolean = false, tokenProvider: Option[() => Future[Questrade.Login]] = None)(implicit system: ActorSystem, materializer: Materializer, ex: ExecutionContext) extends PlayJsonSupport {
