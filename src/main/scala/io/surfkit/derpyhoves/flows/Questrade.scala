@@ -583,8 +583,10 @@ class QuestradeApi(practice: Boolean = false, tokenProvider: Option[() => Future
 
   def unmarshal[T <: Questrade.QT](response: HttpResponse)(implicit um: Reads[T]):Future[T] = Unmarshal(response.entity).to[T]
 
-  def login()(implicit um: Reads[Questrade.Login]) =
+  def login()(implicit um: Reads[Questrade.Login]) = {
+    println(s"curl -XGET '${loginUrl}'")
     Http().singleRequest(HttpRequest(uri = loginUrl)).flatMap(x => unmarshal(x)).map(storeLogin)
+  }
 
   def accounts()(implicit um: Reads[Questrade.Accounts]) =
     httpApi.get("accounts").flatMap(x => unmarshal(x) )
