@@ -541,7 +541,7 @@ class QuestradeApi(practice: Boolean = false, tokenProvider: Option[() => Future
   val teamPath = temp.getAbsolutePath
   val tokenFile = s"${teamPath.substring(0,teamPath.lastIndexOf(File.separator))}/war-pony-refresh.token"
   val config = ConfigFactory.load()
-  var refreshToken = Try(scala.io.Source.fromFile(tokenFile)).toOption.map(_.mkString).getOrElse(config.getString("refreshToken"))
+  var refreshToken = Try(scala.io.Source.fromFile(tokenFile)).toOption.map(_.mkString.trim.replace("\n","")).getOrElse(config.getString("refreshToken"))
   var promise = Promise[Questrade.Login]()
   println(s"refreshToken: ${refreshToken}")
 
