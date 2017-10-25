@@ -558,7 +558,8 @@ class QuestradeApi(practice: Boolean = false, tokenProvider: Option[() => Future
       def updateToken(l: Questrade.Login): Unit = {
         println(s"QuestradeApi got updated token: ${l}")
         refresh(l.expires_in seconds)
-        promise.complete(Try(l))
+        if(!promise.isCompleted)
+          promise.complete(Try(l))
       }
       tokenProvider match {
         case Some(tp) => tp().foreach(updateToken)
