@@ -1,13 +1,15 @@
 package io.surfkit.derpyhoves.flows
 
+import java.util.UUID
+
 import akka.http.scaladsl.model.headers.{Authorization, OAuth2BearerToken}
-import akka.stream.Materializer
+import akka.stream.{KillSwitches, Materializer}
 import akka.NotUsed
 import akka.actor.{ActorSystem, Cancellable}
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.client.RequestBuilding
 import akka.http.scaladsl.model._
-import akka.stream.scaladsl.Source
+import akka.stream.scaladsl.{Keep, Source}
 import akka.util.ByteString
 
 import scala.concurrent.Future
@@ -32,19 +34,23 @@ class QuestradePoller(creds: () => Questrade.Login, path: String, interval: Fini
     println(s"curl -XGET '${url}' -H 'Authorization: Bearer ${accessToken}'")
     RequestBuilding.Get(Uri(url)).addHeader(Authorization(OAuth2BearerToken(creds().access_token)))
   }
-  val initialDelat =
+  val initialDelay =
     if(alignMinute)(60.0-DateTime.now.getSecondOfMinute.toDouble) + (Math.random() * fuzz + 1.0)    // set to the end of the minute plus some fuzzy
     else 0
-  val source: Source[() => HttpRequest, Cancellable] = Source.tick(initialDelat.seconds, interval, request _).filter{ _ =>
+  val source: Source[() => HttpRequest, Cancellable] = Source.tick(initialDelay.seconds, interval, request _).filter{ _ =>
     hoursOpt.map{ timezone =>
       val dt = new DateTime(timezone)
       dt.getHourOfDay >= 8 && dt.getHourOfDay <= 16 && dt.getDayOfWeek() >= org.joda.time.DateTimeConstants.MONDAY && dt.getDayOfWeek() <= org.joda.time.DateTimeConstants.FRIDAY
     }.getOrElse(true)
   }
-  val sourceWithDest: Source[Try[HttpResponse], Cancellable] = source.map(req ⇒ (req(), NotUsed)).via(Http().superPool[NotUsed]()).map(_._1)
+  val sharedKillSwitch = KillSwitches.shared(UUID.randomUUID().toString)
 
-  def apply(): Source[Try[HttpResponse], Cancellable] = sourceWithDest
-  def shutdown = Http().shutdownAllConnectionPools()
+  val sourceWithDest: Source[Try[HttpResponse], Cancellable] =
+    source.map(req ⇒ (req(), NotUsed)).via(Http().superPool[NotUsed]()).map(_._1)
+
+  def apply(): Source[Try[HttpResponse], Cancellable] = sourceWithDest.via(sharedKillSwitch.flow)
+  def shutdown = sharedKillSwitch.shutdown()
+
 }
 
 
