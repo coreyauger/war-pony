@@ -81,7 +81,8 @@ class QuestradeWebSocket[T <: Questrade.QT](endpoint: (Questrade.Login) => Futur
   ),connectionContext = Http().createClientHttpsContext(AkkaSSLConfig()))
 
   def connect:Future[UniqueKillSwitch] = {
-    for{
+    println("call to connect")
+    (for{
       login <- creds()
       url <- endpoint(login)
     }yield{
@@ -110,6 +111,11 @@ class QuestradeWebSocket[T <: Questrade.QT](endpoint: (Questrade.Login) => Futur
         }
       }
       killSwitch
+    }).recover{
+      case t: Throwable =>
+        println("ERROR could not connect websocket.")
+        t.printStackTrace()
+        throw t
     }
   }
 

@@ -28,15 +28,21 @@ object Main extends App{
       val sx = api.search("BABA")
       val s =  Await.result(sx, 10 seconds)
       println(s"sx: ${s}")
+      val sx2 = api.search("GOOG")
+      val s2 =  Await.result(sx2, 10 seconds)
+      println(s"sx: ${s2}")
+      val sx3 = api.search("MSFT")
+      val s3 =  Await.result(sx3, 10 seconds)
+      println(s"sx: ${s3}")
 
 
-      val json =
+      /*val json =
         """
           |{"quotes":[{"symbol":"BABA","symbolId":7422546,"tier":"","bidPrice":null,"bidSize":0,"askPrice":null,"askSize":0,"lastTradePriceTrHrs":null,"lastTradePrice":null,"lastTradeSize":0,"lastTradeTick":null,"lastTradeTime":null,"volume":0,"openPrice":null,"highPrice":null,"lowPrice":null,"delay":0,"isHalted":false,"high52w":null,"low52w":null,"VWAP":null}]}
         """.stripMargin
 
       val test = Json.parse(json).as[Questrade.Quotes]
-      println(s"test: ${test}")
+      println(s"test: ${test}")*/
 
       val fx = api.accounts()
       val f= Await.result(fx, 10 seconds)
@@ -74,11 +80,11 @@ object Main extends App{
       val ticker = QuestradeOneMinuteTicker(api.getCreds _, s.symbols.head.symbolId)
       ticker.json.runForeach(i => i.foreach(x => println(s"meep: ${x}")) )(materializer)
 */
-      val l1 = api.l1Stream(Set(s.symbols.head.symbolId))
+      val l1 = api.l1Stream(Set(s.symbols.head.symbolId, s2.symbols.head.symbolId, s3.symbols.head.symbolId))
       l1.subscribe({ quote: Questrade.Quotes =>
         println(s"GOT QUOTE: ${quote}")
       })
-      val notifications = api.notifications
+      /*val notifications = api.notifications
       notifications.subscribe{ orders: Questrade.Orders =>
         println(s"GOT ORDER NOTIFICATION: ${orders}")
         orders.orders.foreach{ order =>
@@ -105,7 +111,7 @@ object Main extends App{
           }
         }
 
-      }
+      }*/
 
 
       Thread.currentThread.join()
