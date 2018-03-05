@@ -15,6 +15,7 @@ import scala.concurrent.{Await, ExecutionContext, Future, Promise}
 import java.io.{File, PrintWriter}
 import java.net.URL
 
+import akka.util.ByteString
 import com.typesafe.config._
 
 import scala.util.Try
@@ -525,7 +526,11 @@ case class QuestradeRefresh(creds: () => Questrade.Login, practice: Boolean)(imp
 }
 
 case class QuestradeLogin(refreshToken: String, practice: Boolean = false)(implicit system: ActorSystem, materializer: Materializer, ex: ExecutionContext) extends PlayJsonSupport {
-  def unmarshal[T <: Questrade.QT](response: HttpResponse)(implicit um: Reads[T]):Future[T] = Unmarshal(response.entity).to[T]
+  import scala.compat.java8.OptionConverters._
+  def unmarshal[T <: Questrade.QT](response: HttpResponse)(implicit um: Reads[T]):Future[T] = response.getHeader("Content-Type").asScala match{
+    case Some(ct) if response.status.intValue < 300  && ct.value().toLowerCase.contains("json") =>  Unmarshal(response.entity).to[T]
+    case _ => Future.failed(new RuntimeException(s"Questrade failed login status(${response.status}).  Entity: ${response.entity.dataBytes.runFold(ByteString(""))(_ ++ _).map(_.utf8String)}"))
+  }
   def loginUrl =
     if(practice) s"https://practicelogin.questrade.com/oauth2/token?grant_type=refresh_token&refresh_token=${refreshToken}"
     else s"https://login.questrade.com/oauth2/token?grant_type=refresh_token&refresh_token=${refreshToken}"

@@ -80,7 +80,7 @@ object Main extends App{
       val ticker = QuestradeOneMinuteTicker(api.getCreds _, s.symbols.head.symbolId)
       ticker.json.runForeach(i => i.foreach(x => println(s"meep: ${x}")) )(materializer)
 */
-      val l1 = api.l1Stream(Set(s.symbols.head.symbolId, s2.symbols.head.symbolId, s3.symbols.head.symbolId))
+      val l1 = api.l1Stream(Set(16829065,11419766,2067121,9199,8674,40611,7410,6635,7161,4870386,27454,41084,24177,19879,11850217,33237,31867,16996,23591,8049,13648,44247,37125,14281,35327,40349,17173,7422546,24535,28768,24344,8689,29814,8531079,6280,29251,23205,30678,13004,6770,27426,11419765,11326,15012,38526,16142))
       l1.subscribe({ quote: Questrade.Quotes =>
         println(s"GOT QUOTE: ${quote}")
       })
