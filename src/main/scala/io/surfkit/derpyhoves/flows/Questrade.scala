@@ -2,7 +2,7 @@ package io.surfkit.derpyhoves.flows
 
 import akka.actor.{ActorSystem, Cancellable}
 import akka.http.scaladsl.Http
-import akka.http.scaladsl.model.{HttpRequest, HttpResponse}
+import akka.http.scaladsl.model._
 import akka.http.scaladsl.unmarshalling.Unmarshal
 import akka.stream.Materializer
 import akka.stream.scaladsl.Source
@@ -456,6 +456,40 @@ object Questrade {
     val startTime = endTime.plusSeconds(-duration.toSeconds.toInt)
     s"?startTime=${startTime.toString("yyyy-MM-dd'T'HH:mm:ssZZ")}&endTime=${endTime.toString("yyyy-MM-dd'T'HH:mm:ssZZ")}&interval=${interval.period}"
   }
+
+
+
+
+  // Slack Helper classes ...
+  case class SlackField(
+                         title: String,
+                         value: String,
+                         short: Boolean ) extends QT
+  implicit val SlackFieldWrites = Json.writes[SlackField]
+  implicit val SlackFieldReads = Json.reads[SlackField]
+
+  case class SlackAttachment(
+                              fallback: String,
+                              title: String,
+                              text: Option[String] = None,
+                              color: Option[String] = None,
+                              pretext: Option[String] = None,
+                              author_name: Option[String] = None,
+                              author_link: Option[String] = None,
+                              author_icon: Option[String] = None,
+                              title_link: Option[String] = None,
+                              fields: Seq[SlackField] = Seq.empty,
+                              image_url: Option[String] = None,
+                              thumb_url: Option[String] = None,
+                              footer: Option[String] = None,
+                              footer_icon: Option[String] = None,
+                              ts: Option[Long] = None) extends QT
+  implicit val SlackAttachmentWrites = Json.writes[SlackAttachment]
+  implicit val SlackAttachmentReads = Json.reads[SlackAttachment]
+
+  case class SlackAttachments(attachments: Seq[SlackAttachment]) extends QT
+  implicit val SlackAttachmentsWrites = Json.writes[SlackAttachments]
+  implicit val SlackAttachmentsReads = Json.reads[SlackAttachments]
 }
 
 class QuestradeTicker[T <: Questrade.QT](creds: () => Questrade.Login, symbolId: Int, interval: Questrade.Interval, tz: DateTimeZone, params: FiniteDuration => String, fuzz: Double = 6.66)(implicit system: ActorSystem, materializer: Materializer, um: Reads[T]) extends QuestradePoller(
@@ -577,6 +611,13 @@ class QuestradeApi(practice: Boolean = false, tokenProvider: Option[() => Future
 
   refresh(0 seconds)
 
+  def post[T <: Questrade.QT](url: String, post: T)(implicit uw: Writes[T]) = {
+    val json = Json.stringify(uw.writes(post))
+    val jsonEntity = HttpEntity(ContentTypes.`application/json`, json)
+    //println(s"curl -XPOST '${url}' -d '${json}'")
+    Http().singleRequest(HttpRequest(method = HttpMethods.POST, uri = s"${url}", entity = jsonEntity))
+  }
+
   def storeLogin(login: Questrade.Login): Questrade.Login ={
     println(s"beep: ${login}")
     promise.complete(Try(login))
@@ -645,6 +686,8 @@ class QuestradeApi(practice: Boolean = false, tokenProvider: Option[() => Future
   def l1Stream(ids: Set[Int]) =
     new QuestradeWebSocket[Questrade.Quotes]( (login: Questrade.Login) => l1StreamPort(ids).map(sp => s"wss://${new URL(login.api_server).getHost}:${sp.streamPort}"), getCreds _ )
 
+
+  def sendSlack(webhookUrl: String, attachments: Questrade.SlackAttachments) = post(webhookUrl, attachments)
 
 
 }

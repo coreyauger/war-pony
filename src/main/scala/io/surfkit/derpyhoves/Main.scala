@@ -22,18 +22,27 @@ object Main extends App{
     implicit val materializer = ActorMaterializer(ActorMaterializerSettings(system).withSupervisionStrategy(decider))
 
     try {
-      val api = new QuestradeApi(true)
+      val api = new QuestradeApi(false)
       import Questrade._
 
-      val sx = api.search("BABA")
-      val s =  Await.result(sx, 10 seconds)
-      println(s"sx: ${s}")
-      val sx2 = api.search("GOOG")
-      val s2 =  Await.result(sx2, 10 seconds)
-      println(s"sx: ${s2}")
-      val sx3 = api.search("MSFT")
-      val s3 =  Await.result(sx3, 10 seconds)
-      println(s"sx: ${s3}")
+
+      val watchList = List(
+        "FB", "BABA", "GOOG", "AAPL", "TSLA", "MSFT", "NVDA", "AMZN", "CRM", "GOOGL", "ADBE", "NFLX", "INTC", "BIDU",
+        "ADP", "ADSK", "ATVI", "AVGO", "CSCO", "CTXS", "EA", "EXPE", "INFY", "ORCL", "QCOM", "NXPI"
+      )
+
+      val ids = watchList.flatMap{ sym =>
+        val sx = api.search(sym)
+        val s =  Await.result(sx, 10 seconds)
+        println(s"sx: ${s.symbols.headOption.map(_.symbolId)}")
+        s.symbols.headOption.map{ x =>
+          (x.symbol, x.symbolId)
+        }
+      }
+
+      println(s"ids: ${ids}")
+
+
 
 
       /*val json =
@@ -80,10 +89,17 @@ object Main extends App{
       val ticker = QuestradeOneMinuteTicker(api.getCreds _, s.symbols.head.symbolId)
       ticker.json.runForeach(i => i.foreach(x => println(s"meep: ${x}")) )(materializer)
 */
-      val l1 = api.l1Stream(Set(16829065,11419766,2067121,9199,8674,40611,7410,6635,7161,4870386,27454,41084,24177,19879,11850217,33237,31867,16996,23591,8049,13648,44247,37125,14281,35327,40349,17173,7422546,24535,28768,24344,8689,29814,8531079,6280,29251,23205,30678,13004,6770,27426,11419765,11326,15012,38526,16142))
+     /* val l1 = api.l1Stream(Set(16829065,11419766,2067121,9199,8674,40611,7410,6635,7161,4870386,27454,41084,24177,19879,11850217,33237,31867,16996,23591,8049,13648,44247,37125,14281,35327,40349,17173,7422546,24535,28768,24344,8689,29814,8531079,6280,29251,23205,30678,13004,6770,27426,11419765,11326,15012,38526,16142))
       l1.subscribe({ quote: Questrade.Quotes =>
         println(s"GOT QUOTE: ${quote}")
-      })
+      })*/
+
+     /* Set(16829065,11419766,2067121,9199).map{ sym =>
+        api.candles(sym, DateTime.now.minusDays(30), DateTime.now, Questrade.Interval.OneHour ).map{ candles =>
+          println(s"CANDLES: ${candles.candles.map(_.close)}")
+        }
+      }*/
+
       /*val notifications = api.notifications
       notifications.subscribe{ orders: Questrade.Orders =>
         println(s"GOT ORDER NOTIFICATION: ${orders}")
