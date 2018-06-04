@@ -574,13 +574,13 @@ case class QuestradeLogin(refreshToken: String, practice: Boolean = false)(impli
   }
 }
 
-class QuestradeApi(practice: Boolean = false, tokenProvider: Option[() => Future[Questrade.Login]] = None)(implicit system: ActorSystem, materializer: Materializer, ex: ExecutionContext) extends PlayJsonSupport {
+class QuestradeApi(practice: Boolean = false, tokenProvider: Option[() => Future[Questrade.Login]] = None, manualToken: Option[String] = None)(implicit system: ActorSystem, materializer: Materializer, ex: ExecutionContext) extends PlayJsonSupport {
 
   val temp: File = File.createTempFile("just-need-the-path", ".tmp")
   val teamPath = temp.getAbsolutePath
   val tokenFile = s"${teamPath.substring(0,teamPath.lastIndexOf(File.separator))}/war-pony-refresh.token"
   val config = ConfigFactory.load()
-  var refreshToken = Try(scala.io.Source.fromFile(tokenFile)).toOption.map(_.mkString.trim.replace("\n","")).getOrElse(config.getString("refreshToken"))
+  var refreshToken = manualToken.getOrElse( Try(scala.io.Source.fromFile(tokenFile)).toOption.map(_.mkString.trim.replace("\n","")).getOrElse(config.getString("refreshToken")) )
   var promise = Promise[Questrade.Login]()
   println(s"refreshToken: ${refreshToken}")
 
